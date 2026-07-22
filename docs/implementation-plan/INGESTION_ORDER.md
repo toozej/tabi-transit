@@ -1,0 +1,18 @@
+# Recommended Agent Ingestion Order
+
+1. `00_README.md`
+2. `01_PRODUCT_REQUIREMENTS.md`
+3. `02_SYSTEM_ARCHITECTURE.md`
+4. `03_REPOSITORY_ENGINEERING_STANDARDS.md`
+5. `17_API_CONTRACTS.md`
+6. Assigned component plan(s)
+7. `12_TESTING_QUALITY_STRATEGY.md`
+8. `13_SECURITY_PRIVACY_COMPLIANCE.md`
+9. `15_DELIVERY_ROADMAP.md`
+10. `16_AGENT_WORK_PACKAGES.md`
+11. `18_OPEN_QUESTIONS_DECISIONS.md`
+12. `20_LINUX_DOCKER_COMPOSE_RUNBOOK.md`
+13. `21_FLY_IO_OPTIONAL_DEPLOYMENT.md` when relevant
+14. `19_REFERENCE_SOURCES.md`
+
+Agents should also parse `manifest.json`. Approved ADRs override the plan according to `00_README.md`.

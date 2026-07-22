@@ -1,0 +1,10 @@
+[Unit]
+Description=Tabi GTFS import
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tabi
+ExecStart=/usr/bin/flock -n /run/lock/tabi-gtfs-import.lock /usr/bin/docker compose --env-file .env --env-file release.env -f compose.yaml -f compose.production.yaml --profile jobs run --rm gtfs-importer

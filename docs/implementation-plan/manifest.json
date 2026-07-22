@@ -1,0 +1,258 @@
+{
+  "project": "Tabi",
+  "generated": "2026-07-22",
+  "entry_point": "00_README.md",
+  "ingestion_order": "INGESTION_ORDER.md",
+  "canonical_deployment": "Single Linux server with Docker Compose and Caddy",
+  "optional_deployments": [
+    "Fly.io free trial or paid usage; no standing free tier"
+  ],
+  "files": [
+    {
+      "path": "00_README.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-000",
+      "title": "Tabi Implementation Plan \u2014 Agent Entry Point"
+    },
+    {
+      "path": "01_PRODUCT_REQUIREMENTS.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-001",
+      "title": "Product Requirements and Acceptance Criteria"
+    },
+    {
+      "path": "02_SYSTEM_ARCHITECTURE.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-002",
+      "title": "System Architecture"
+    },
+    {
+      "path": "03_REPOSITORY_ENGINEERING_STANDARDS.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-003",
+      "title": "Repository and Engineering Standards"
+    },
+    {
+      "path": "04_MOBILE_APPLICATION_PLAN.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-004",
+      "title": "Mobile Application Implementation Plan"
+    },
+    {
+      "path": "05_MAPS_SEARCH_TRIP_PLANNING.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-005",
+      "title": "Maps, Search, Geocoding and Trip Planning"
+    },
+    {
+      "path": "06_BACKEND_API_SERVICES.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-006",
+      "title": "Backend API and Service Implementation Plan"
+    },
+    {
+      "path": "07_TRANSIT_DATA_INGESTION.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-007",
+      "title": "Transit Data Ingestion and Normalization"
+    },
+    {
+      "path": "08_DATA_MODEL_STORAGE_CACHING.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-008",
+      "title": "Data Model, Storage and Caching"
+    },
+    {
+      "path": "09_NOTIFICATIONS_BACKGROUND_WORK.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-009",
+      "title": "Notifications and Background Work"
+    },
+    {
+      "path": "10_INFRASTRUCTURE_ENVIRONMENTS.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-010",
+      "title": "Linux Server and Docker Compose Infrastructure"
+    },
+    {
+      "path": "11_CI_CD_RELEASE_MANAGEMENT.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-011",
+      "title": "CI/CD and Release Management"
+    },
+    {
+      "path": "12_TESTING_QUALITY_STRATEGY.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-012",
+      "title": "Testing and Quality Strategy"
+    },
+    {
+      "path": "13_SECURITY_PRIVACY_COMPLIANCE.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-013",
+      "title": "Security, Privacy, Licensing and Compliance"
+    },
+    {
+      "path": "14_OBSERVABILITY_OPERATIONS.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-014",
+      "title": "Observability and Operations"
+    },
+    {
+      "path": "15_DELIVERY_ROADMAP.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-015",
+      "title": "Phased Delivery Roadmap"
+    },
+    {
+      "path": "16_AGENT_WORK_PACKAGES.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-016",
+      "title": "Agent Work Packages and Handoff Contracts"
+    },
+    {
+      "path": "17_API_CONTRACTS.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-017",
+      "title": "Initial API Contract"
+    },
+    {
+      "path": "18_OPEN_QUESTIONS_DECISIONS.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-018",
+      "title": "Open Questions, Decision Gates and Risks"
+    },
+    {
+      "path": "19_REFERENCE_SOURCES.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-019",
+      "title": "Authoritative Reference Sources"
+    },
+    {
+      "path": "20_LINUX_DOCKER_COMPOSE_RUNBOOK.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-020",
+      "title": "Linux Docker Compose Deployment Runbook"
+    },
+    {
+      "path": "21_FLY_IO_OPTIONAL_DEPLOYMENT.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-021",
+      "title": "Optional Fly.io Deployment"
+    },
+    {
+      "path": "INGESTION_ORDER.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": null,
+      "title": "INGESTION_ORDER"
+    },
+    {
+      "path": "deployment/.env.example",
+      "type": "example",
+      "executable": false
+    },
+    {
+      "path": "deployment/Caddyfile",
+      "type": "file",
+      "executable": false
+    },
+    {
+      "path": "deployment/compose.production.yaml",
+      "type": "yaml",
+      "executable": false
+    },
+    {
+      "path": "deployment/compose.yaml",
+      "type": "yaml",
+      "executable": false
+    },
+    {
+      "path": "deployment/fly/fly.toml.example",
+      "type": "example",
+      "executable": false
+    },
+    {
+      "path": "deployment/release.env.example",
+      "type": "example",
+      "executable": false
+    },
+    {
+      "path": "deployment/runtime.env.example",
+      "type": "example",
+      "executable": false
+    },
+    {
+      "path": "deployment/scripts/backup-postgres.sh",
+      "type": "sh",
+      "executable": true
+    },
+    {
+      "path": "deployment/scripts/deploy.sh",
+      "type": "sh",
+      "executable": true
+    },
+    {
+      "path": "deployment/scripts/restore-postgres.sh",
+      "type": "sh",
+      "executable": true
+    },
+    {
+      "path": "deployment/secrets/README.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": null,
+      "title": "README"
+    },
+    {
+      "path": "deployment/systemd/tabi-gtfs-import.service",
+      "type": "service",
+      "executable": false
+    },
+    {
+      "path": "deployment/systemd/tabi-gtfs-import.timer",
+      "type": "timer",
+      "executable": false
+    },
+    {
+      "path": "deployment/systemd/tabi-postgres-backup.service",
+      "type": "service",
+      "executable": false
+    },
+    {
+      "path": "deployment/systemd/tabi-postgres-backup.timer",
+      "type": "timer",
+      "executable": false
+    }
+  ],
+  "validation": {
+    "compose_yaml_parsed": true,
+    "postgres_not_public": true,
+    "private_database_network": true,
+    "provider_egress_network": true,
+    "shell_scripts_bash_n": true,
+    "fly_toml_parsed": true
+  }
+}
