@@ -1,0 +1,78 @@
+name: Quality and contract validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-quality:
+    name: Format, static checks, unit tests, and contract drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the untrusted revision without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Install locked JavaScript dependencies
+        run: |
+          corepack enable
+          corepack pnpm install --frozen-lockfile
+      - name: Validate CI workflow syntax
+        run: bash scripts/ci/validate-workflows.sh
+      - name: Validate CI workflow expressions
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/*.yml
+      - name: Format, lint, and strict TypeScript checks
+        run: make format-check lint typecheck
+      - name: Unit and race tests
+        run: make test test-race
+      - name: OpenAPI and sqlc generated-code drift
+        run: make generate-check
+      - name: Secret, privacy, and repository policy checks
+        run: bash scripts/quality-security-check.sh
+
+  compose-and-fixtures:
+    name: Compose topology and deterministic fixture integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the untrusted revision without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Install locked JavaScript dependencies
+        run: |
+          corepack enable
+          corepack pnpm install --frozen-lockfile
+      - name: Validate the canonical Compose topology
+        run: bash deployment/scripts/validate-compose.sh
+      - name: Run deterministic API and mobile fixture integration checks
+        run: tests/integration/run.sh
