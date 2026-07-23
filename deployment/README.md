@@ -33,7 +33,12 @@ For production, use `docker compose --env-file .env --env-file release.env -f co
 
 Install the systemd service/timer pairs from `systemd/`, then manually run every service once and inspect `systemctl list-timers`. `backup-postgres.sh` creates logical custom-format dumps and checksums before optional restic backup. Restore rehearsals must target an isolated database first; no restore script is provided that overwrites the live database.
 
-`deploy.sh` validates an immutable candidate release file, backs up, runs migrations, starts services, checks public readiness, and restores the previous application image set on a failed health check. Database migrations must remain expand/migrate/contract compatible for image rollback.
+`deploy.sh` validates an immutable candidate release file, backs up, runs
+migrations, starts candidate services, and checks public readiness before it
+atomically promotes `release.env`. A failed health check recreates the prior
+application image set while retaining the previously active release file.
+Database migrations must remain expand/migrate/contract compatible for image
+rollback.
 
 The scripts use `/run/lock` by default. Test harnesses may set `TABI_LOCK_DIR` to a private writable temporary directory; production must retain the host lock directory.
 

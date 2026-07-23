@@ -37,8 +37,10 @@ image.
 Container build, vulnerability scanning, SBOM/provenance generation, signing,
 GHCR publishing, protected-environment deployment, and rollback rehearsal are
 disabled pending a reviewed Dockerfile and the required GitHub environment,
-registry, signing, host, and backup evidence. Do not add those credentials to
-workflow YAML, repository variables, or pull-request contexts.
+registry, signing, host, and backup evidence. The local deployment-script
+regression check proves only that an unhealthy candidate does not replace the
+active `release.env`; it is not a host rollback rehearsal. Do not add those
+credentials to workflow YAML, repository variables, or pull-request contexts.
 
 EAS build/submit and Maestro device runs are also disabled in CI until EAS
 credentials and supported iOS/Android development-build runners are available.

@@ -13,3 +13,4 @@ GOCACHE="${GOCACHE:-/tmp/tabi-go-integration-cache}" \
   go test ./internal/api ./internal/config ./services/transit-api/cmd/transit-api
 corepack pnpm --dir apps/mobile test
 bash deployment/scripts/validate-compose.sh
+bash tests/integration/deployment_release_safety.sh

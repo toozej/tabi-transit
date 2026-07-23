@@ -15,6 +15,10 @@ flock -n 9 || { echo "another deployment is running" >&2; exit 1; }
 
 candidate_release=$(realpath -- "$1")
 test -s "$candidate_release"
+[[ "$candidate_release" != "$deployment_root/release.env" ]] || {
+  echo "candidate release file must not replace the active release.env in place" >&2
+  exit 2
+}
 
 # A release file is data, not a shell program. Require every runtime image to be
 # an immutable SHA-256 reference before Compose is allowed to interpolate it.
@@ -39,23 +43,26 @@ candidate=(docker compose --env-file .env --env-file "$candidate_release" -f com
 "${candidate[@]}" pull
 "${candidate[@]}" --profile jobs run --rm migrate
 
-[[ -f release.env ]] && cp -f release.env release.previous.env
-install -m 0600 "$candidate_release" release.env
-active=(docker compose --env-file .env --env-file release.env -f compose.yaml -f compose.production.yaml)
-"${active[@]}" up -d --remove-orphans
+# Keep the active release file untouched until the candidate is both migrated
+# and healthy.  Compose can use the candidate directly, which lets a failed
+# health check restore the prior image set without leaving release.env pointing
+# at an image that was rejected.
+"${candidate[@]}" up -d --remove-orphans
 
 domain=$(sed -n 's/^TABI_API_DOMAIN=//p' .env | tail -n 1)
 [[ -n "$domain" ]] || { echo "TABI_API_DOMAIN missing from .env" >&2; exit 1; }
 for _ in $(seq 1 30); do
   if curl --fail --silent --show-error "https://$domain/health/ready" >/dev/null; then
+    [[ -f release.env ]] && cp -f release.env release.previous.env
+    install -m 0600 "$candidate_release" release.env
     exit 0
   fi
   sleep 5
 done
 
 echo "health check failed; returning application containers to previous image set" >&2
-if [[ -f release.previous.env ]]; then
-  rollback=(docker compose --env-file .env --env-file release.previous.env -f compose.yaml -f compose.production.yaml)
+if [[ -f release.env ]]; then
+  rollback=(docker compose --env-file .env --env-file release.env -f compose.yaml -f compose.production.yaml)
   "${rollback[@]}" up -d --remove-orphans
 fi
 exit 1
