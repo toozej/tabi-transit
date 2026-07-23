@@ -66,6 +66,27 @@ type NearbyStop struct {
 }
 
 type VehicleFilter struct{ SourceIDs []string }
+type CatalogRoute struct {
+	ID, Mode, ShortName, LongName string
+	Color, TextColor              *string
+}
+type CatalogStop struct {
+	ID, Name             string
+	Coordinate           Coordinate
+	Modes, RouteIDs      []string
+	ParentStopID         *string
+	WheelchairAccessible *bool
+}
+type CatalogFilter struct {
+	Modes         []string
+	Query, Cursor string
+	Limit         int
+}
+type CatalogPage[T any] struct {
+	Items             []T
+	NextCursor        string
+	StaticFeedVersion string
+}
 type NearbyStopsFilter struct {
 	FeedVersionID int64
 	Coordinate    Coordinate
@@ -81,6 +102,13 @@ type Reader interface {
 	SourceHealth(ctx context.Context, sourceID string) (SourceHealth, error)
 	ListCurrentVehicles(ctx context.Context, filter VehicleFilter) ([]Vehicle, error)
 	ListNearbyStops(ctx context.Context, filter NearbyStopsFilter) ([]NearbyStop, error)
+}
+
+// CatalogReader keeps static-feed SQL details out of application handlers. Its
+// cursor is a storage key; public cursor encoding remains in application.
+type CatalogReader interface {
+	ListCatalogRoutes(ctx context.Context, filter CatalogFilter) (CatalogPage[CatalogRoute], error)
+	ListCatalogStops(ctx context.Context, filter CatalogFilter) (CatalogPage[CatalogStop], error)
 }
 
 // StaticImporterWriter supports a staging import followed by an atomic feed

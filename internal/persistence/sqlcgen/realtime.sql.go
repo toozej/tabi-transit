@@ -11,9 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const hasReadyVehicleData = `-- name: HasReadyVehicleData :one
+SELECT EXISTS (
+  SELECT 1
+  FROM realtime.vehicle_current vehicle
+  JOIN realtime.snapshots snapshot ON snapshot.id = vehicle.snapshot_id
+  JOIN ops.source_health health ON health.source_id = vehicle.source_id
+  WHERE snapshot.is_valid
+    AND health.last_valid_snapshot_at IS NOT NULL
+)
+`
+
+// Readiness deliberately requires a valid snapshot and its corresponding
+// successful source-health record. A database connection alone is not enough
+// to describe stale or absent transit data as ready.
+func (q *Queries) HasReadyVehicleData(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, hasReadyVehicleData)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listCurrentVehicles = `-- name: ListCurrentVehicles :many
-SELECT public_id, source_vehicle_id, route_public_id, trip_public_id, mode, direction_id,
-       headsign, ST_X(point::geometry) AS longitude, ST_Y(point::geometry) AS latitude,
+SELECT source_id, public_id, source_vehicle_id, route_public_id, trip_public_id, mode, direction_id,
+       headsign, ST_X(point::geometry)::double precision AS longitude, ST_Y(point::geometry)::double precision AS latitude,
        bearing, speed_meters_per_second, in_service, source_updated_at, entity_updated_at,
        fetched_at, processed_at, freshness_status, snapshot_id
 FROM realtime.vehicle_current
@@ -22,6 +43,7 @@ ORDER BY public_id
 `
 
 type ListCurrentVehiclesRow struct {
+	SourceID             string                  `json:"source_id"`
 	PublicID             string                  `json:"public_id"`
 	SourceVehicleID      string                  `json:"source_vehicle_id"`
 	RoutePublicID        pgtype.Text             `json:"route_public_id"`
@@ -29,8 +51,8 @@ type ListCurrentVehiclesRow struct {
 	Mode                 TransitMode             `json:"mode"`
 	DirectionID          pgtype.Int2             `json:"direction_id"`
 	Headsign             pgtype.Text             `json:"headsign"`
-	Longitude            interface{}             `json:"longitude"`
-	Latitude             interface{}             `json:"latitude"`
+	Longitude            float64                 `json:"longitude"`
+	Latitude             float64                 `json:"latitude"`
 	Bearing              pgtype.Numeric          `json:"bearing"`
 	SpeedMetersPerSecond pgtype.Numeric          `json:"speed_meters_per_second"`
 	InService            bool                    `json:"in_service"`
@@ -52,6 +74,7 @@ func (q *Queries) ListCurrentVehicles(ctx context.Context, sourceIds []string) (
 	for rows.Next() {
 		var i ListCurrentVehiclesRow
 		if err := rows.Scan(
+			&i.SourceID,
 			&i.PublicID,
 			&i.SourceVehicleID,
 			&i.RoutePublicID,

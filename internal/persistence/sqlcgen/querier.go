@@ -11,8 +11,18 @@ import (
 type Querier interface {
 	GetActiveFeedVersion(ctx context.Context, sourceID string) (GetActiveFeedVersionRow, error)
 	GetSourceHealth(ctx context.Context, sourceID string) (GetSourceHealthRow, error)
+	// Readiness deliberately requires a valid snapshot and its corresponding
+	// successful source-health record. A database connection alone is not enough
+	// to describe stale or absent transit data as ready.
+	HasReadyVehicleData(ctx context.Context) (bool, error)
+	// The public static endpoints currently combine enabled active feeds. The
+	// newest activation is the response version marker until the API exposes a
+	// multi-source static manifest.
+	LatestActiveFeedVersionLabel(ctx context.Context) (string, error)
 	ListCurrentVehicles(ctx context.Context, sourceIds []string) ([]ListCurrentVehiclesRow, error)
 	ListNearbyStopsPerMode(ctx context.Context, arg ListNearbyStopsPerModeParams) ([]ListNearbyStopsPerModeRow, error)
+	ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListRoutesRow, error)
+	ListStops(ctx context.Context, arg ListStopsParams) ([]ListStopsRow, error)
 	UpsertSourceHealthSuccess(ctx context.Context, arg UpsertSourceHealthSuccessParams) error
 }
 

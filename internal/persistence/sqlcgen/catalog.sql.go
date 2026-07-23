@@ -76,6 +76,168 @@ func (q *Queries) GetSourceHealth(ctx context.Context, sourceID string) (GetSour
 	return i, err
 }
 
+const latestActiveFeedVersionLabel = `-- name: LatestActiveFeedVersionLabel :one
+SELECT version_label
+FROM catalog.feed_versions
+WHERE status = 'active'
+ORDER BY activated_at DESC, id DESC
+LIMIT 1
+`
+
+// The public static endpoints currently combine enabled active feeds. The
+// newest activation is the response version marker until the API exposes a
+// multi-source static manifest.
+func (q *Queries) LatestActiveFeedVersionLabel(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, latestActiveFeedVersionLabel)
+	var version_label string
+	err := row.Scan(&version_label)
+	return version_label, err
+}
+
+const listRoutes = `-- name: ListRoutes :many
+WITH active_feed_versions AS (
+  SELECT id FROM catalog.feed_versions WHERE status = 'active'
+)
+SELECT r.public_id, r.mode, r.short_name, r.long_name, COALESCE(r.color::text, '') AS color,
+       COALESCE(r.text_color::text, '') AS text_color
+FROM transit.routes r
+JOIN active_feed_versions a ON a.id = r.feed_version_id
+WHERE (cardinality($1::text[]) IS NULL OR r.mode::text = ANY($1::text[]))
+  AND ($2::text = '' OR lower(concat_ws(' ', r.public_id, r.short_name, r.long_name)) LIKE '%' || lower($2::text) || '%')
+  AND ($3::text = '' OR r.public_id > $3::text)
+ORDER BY r.public_id
+LIMIT $4
+`
+
+type ListRoutesParams struct {
+	Modes    []string `json:"modes"`
+	Query    string   `json:"query"`
+	Cursor   string   `json:"cursor"`
+	RowLimit int32    `json:"row_limit"`
+}
+
+type ListRoutesRow struct {
+	PublicID  string      `json:"public_id"`
+	Mode      TransitMode `json:"mode"`
+	ShortName pgtype.Text `json:"short_name"`
+	LongName  pgtype.Text `json:"long_name"`
+	Color     interface{} `json:"color"`
+	TextColor interface{} `json:"text_color"`
+}
+
+func (q *Queries) ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListRoutesRow, error) {
+	rows, err := q.db.Query(ctx, listRoutes,
+		arg.Modes,
+		arg.Query,
+		arg.Cursor,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRoutesRow{}
+	for rows.Next() {
+		var i ListRoutesRow
+		if err := rows.Scan(
+			&i.PublicID,
+			&i.Mode,
+			&i.ShortName,
+			&i.LongName,
+			&i.Color,
+			&i.TextColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStops = `-- name: ListStops :many
+WITH active_feed_versions AS (
+  SELECT id FROM catalog.feed_versions WHERE status = 'active'
+), matching_stops AS (
+  SELECT s.feed_version_id, s.public_id, s.name, s.mode, s.parent_public_id,
+         s.wheelchair_boarding,
+         ST_X(s.point::geometry)::double precision AS longitude,
+         ST_Y(s.point::geometry)::double precision AS latitude
+  FROM transit.stops s
+  JOIN active_feed_versions a ON a.id = s.feed_version_id
+  WHERE (cardinality($1::text[]) IS NULL OR s.mode::text = ANY($1::text[]))
+    AND lower(concat_ws(' ', s.public_id, s.name)) LIKE '%' || lower($2::text) || '%'
+    AND ($3::text = '' OR s.public_id > $3::text)
+  ORDER BY s.public_id
+  LIMIT $4
+)
+SELECT s.public_id, s.name, s.mode, s.parent_public_id, s.wheelchair_boarding,
+       s.longitude, s.latitude,
+       COALESCE(jsonb_agg(DISTINCT trip.route_public_id) FILTER (WHERE trip.route_public_id IS NOT NULL), '[]'::jsonb) AS route_public_ids
+FROM matching_stops s
+LEFT JOIN transit.stop_times st
+  ON st.feed_version_id = s.feed_version_id AND st.stop_public_id = s.public_id
+LEFT JOIN transit.trips trip
+  ON trip.feed_version_id = st.feed_version_id AND trip.public_id = st.trip_public_id
+GROUP BY s.feed_version_id, s.public_id, s.name, s.mode, s.parent_public_id,
+         s.wheelchair_boarding, s.longitude, s.latitude
+ORDER BY s.public_id
+`
+
+type ListStopsParams struct {
+	Modes    []string `json:"modes"`
+	Query    string   `json:"query"`
+	Cursor   string   `json:"cursor"`
+	RowLimit int32    `json:"row_limit"`
+}
+
+type ListStopsRow struct {
+	PublicID           string      `json:"public_id"`
+	Name               string      `json:"name"`
+	Mode               TransitMode `json:"mode"`
+	ParentPublicID     pgtype.Text `json:"parent_public_id"`
+	WheelchairBoarding int16       `json:"wheelchair_boarding"`
+	Longitude          float64     `json:"longitude"`
+	Latitude           float64     `json:"latitude"`
+	RoutePublicIds     interface{} `json:"route_public_ids"`
+}
+
+func (q *Queries) ListStops(ctx context.Context, arg ListStopsParams) ([]ListStopsRow, error) {
+	rows, err := q.db.Query(ctx, listStops,
+		arg.Modes,
+		arg.Query,
+		arg.Cursor,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStopsRow{}
+	for rows.Next() {
+		var i ListStopsRow
+		if err := rows.Scan(
+			&i.PublicID,
+			&i.Name,
+			&i.Mode,
+			&i.ParentPublicID,
+			&i.WheelchairBoarding,
+			&i.Longitude,
+			&i.Latitude,
+			&i.RoutePublicIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertSourceHealthSuccess = `-- name: UpsertSourceHealthSuccess :exec
 INSERT INTO ops.source_health (
   source_id, last_attempt_at, last_success_at, last_source_updated_at,
