@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from "@/ui/PlaceholderScreen";
+import { AlertsView } from "@/features/riderInfo/RiderInfoViews";
 
 export default function AlertsRoute() {
-  return <PlaceholderScreen title="Alerts" />;
+  return <AlertsView />;
 }

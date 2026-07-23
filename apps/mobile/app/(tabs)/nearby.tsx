@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from "@/ui/PlaceholderScreen";
+import { NearbyView } from "@/features/riderInfo/RiderInfoViews";
 
 export default function NearbyRoute() {
-  return <PlaceholderScreen title="Nearby" />;
+  return <NearbyView />;
 }

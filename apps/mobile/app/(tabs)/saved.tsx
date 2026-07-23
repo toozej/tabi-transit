@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from "@/ui/PlaceholderScreen";
+import { SavedView } from "@/features/riderInfo/RiderInfoViews";
 
 export default function SavedRoute() {
-  return <PlaceholderScreen title="Saved" />;
+  return <SavedView />;
 }
