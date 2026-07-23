@@ -194,6 +194,26 @@ func TestPhaseThreeFeatureGatesFailClosed(t *testing.T) {
 	}
 }
 
+func TestNotificationEndpointsFailClosedWithoutTokenExposure(t *testing.T) {
+	h := testServer(t, fakeVehicles{})
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodPost, "/v1/installations", `{"platform":"ios","locale":"en-US","timeZone":"America/Los_Angeles","appVersion":"1"}`},
+		{http.MethodPut, "/v1/installations/fixture:installation:one/push-token", `{"platform":"ios","token":"ExponentPushToken[private-token]"}`},
+		{http.MethodGet, "/v1/subscriptions", ""},
+		{http.MethodPost, "/v1/subscriptions", `{"type":"service_alert"}`},
+		{http.MethodDelete, "/v1/subscriptions/fixture:subscription:one", ""},
+	} {
+		r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		r.Header.Set("X-Tabi-Installation-Credential", "0123456789abcdef0123456789abcdef")
+		r.RemoteAddr = "198.51.100.7:123"
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "3600" || !strings.Contains(w.Body.String(), `"feature_unavailable"`) || strings.Contains(w.Body.String(), "private-token") {
+			t.Fatalf("%s %s = %d %s", tc.method, tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestRiderInformationStaticResponsesAndNearbyGrouping(t *testing.T) {
 	rider := &fakeRiderInfo{nearby: []persistence.NearbyStop{{ID: "fixture:stop:1", Name: "Bus", Mode: "bus", Coordinate: persistence.Coordinate{Longitude: -122.67, Latitude: 45.52}, DistanceMeters: 12}, {ID: "fixture:stop:2", Name: "Rail", Mode: "light_rail", Coordinate: persistence.Coordinate{Longitude: -122.68, Latitude: 45.53}, DistanceMeters: 40}}}
 	h := testRiderServer(t, rider)

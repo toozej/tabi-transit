@@ -35,6 +35,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o /out/gtfs-importer ./services/gtfs-importer/cmd/gtfs-importer && \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
       -ldflags="-s -w" \
+      -o /out/notification-worker ./services/notification-worker/cmd/notification-worker && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
+      -ldflags="-s -w" \
       -o /out/tabi-healthcheck ./docker/healthcheck && \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
       -ldflags="-s -w" \

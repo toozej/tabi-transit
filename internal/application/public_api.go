@@ -56,7 +56,10 @@ type Service struct {
 	// (Mapbox search/geocoding) have reviewed credentials, terms, retention,
 	// attribution, and supported constraint semantics.
 	Planning PlanningFeatures
-	Now      func() time.Time
+	// Notifications stays disabled until encrypted persistence and the Expo
+	// Push decision/credentials are explicitly composed by the runtime.
+	Notifications NotificationFeatures
+	Now           func() time.Time
 }
 
 type RiderInfo interface {

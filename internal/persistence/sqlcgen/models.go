@@ -11,6 +11,95 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AppNotificationDeliveryStatus string
+
+const (
+	AppNotificationDeliveryStatusPending      AppNotificationDeliveryStatus = "pending"
+	AppNotificationDeliveryStatusSending      AppNotificationDeliveryStatus = "sending"
+	AppNotificationDeliveryStatusSent         AppNotificationDeliveryStatus = "sent"
+	AppNotificationDeliveryStatusRetryPending AppNotificationDeliveryStatus = "retry_pending"
+	AppNotificationDeliveryStatusExpired      AppNotificationDeliveryStatus = "expired"
+	AppNotificationDeliveryStatusFailed       AppNotificationDeliveryStatus = "failed"
+	AppNotificationDeliveryStatusDisabled     AppNotificationDeliveryStatus = "disabled"
+)
+
+func (e *AppNotificationDeliveryStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AppNotificationDeliveryStatus(s)
+	case string:
+		*e = AppNotificationDeliveryStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AppNotificationDeliveryStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAppNotificationDeliveryStatus struct {
+	AppNotificationDeliveryStatus AppNotificationDeliveryStatus `json:"app_notification_delivery_status"`
+	Valid                         bool                          `json:"valid"` // Valid is true if AppNotificationDeliveryStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAppNotificationDeliveryStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.AppNotificationDeliveryStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AppNotificationDeliveryStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAppNotificationDeliveryStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AppNotificationDeliveryStatus), nil
+}
+
+type AppSubscriptionType string
+
+const (
+	AppSubscriptionTypeServiceAlert      AppSubscriptionType = "service_alert"
+	AppSubscriptionTypeDepartureReminder AppSubscriptionType = "departure_reminder"
+)
+
+func (e *AppSubscriptionType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AppSubscriptionType(s)
+	case string:
+		*e = AppSubscriptionType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AppSubscriptionType: %T", src)
+	}
+	return nil
+}
+
+type NullAppSubscriptionType struct {
+	AppSubscriptionType AppSubscriptionType `json:"app_subscription_type"`
+	Valid               bool                `json:"valid"` // Valid is true if AppSubscriptionType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAppSubscriptionType) Scan(value interface{}) error {
+	if value == nil {
+		ns.AppSubscriptionType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AppSubscriptionType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAppSubscriptionType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AppSubscriptionType), nil
+}
+
 type CatalogFeedVersionStatus string
 
 const (
@@ -144,6 +233,80 @@ func (ns NullTransitMode) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.TransitMode), nil
+}
+
+type AppInstallation struct {
+	ID                 pgtype.UUID        `json:"id"`
+	CredentialVerifier string             `json:"credential_verifier"`
+	Platform           string             `json:"platform"`
+	Locale             string             `json:"locale"`
+	TimeZone           string             `json:"time_zone"`
+	AppVersion         string             `json:"app_version"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type AppNotificationDelivery struct {
+	ID               pgtype.UUID                   `json:"id"`
+	SubscriptionID   pgtype.UUID                   `json:"subscription_id"`
+	PushTokenID      pgtype.UUID                   `json:"push_token_id"`
+	NotificationType string                        `json:"notification_type"`
+	DedupeKey        string                        `json:"dedupe_key"`
+	Payload          []byte                        `json:"payload"`
+	OccurredAt       pgtype.Timestamptz            `json:"occurred_at"`
+	ExpiresAt        pgtype.Timestamptz            `json:"expires_at"`
+	Status           AppNotificationDeliveryStatus `json:"status"`
+	Attempts         int16                         `json:"attempts"`
+	NextAttemptAt    pgtype.Timestamptz            `json:"next_attempt_at"`
+	ClaimUntil       pgtype.Timestamptz            `json:"claim_until"`
+	ProviderTicketID pgtype.Text                   `json:"provider_ticket_id"`
+	LastErrorCode    pgtype.Text                   `json:"last_error_code"`
+	SentAt           pgtype.Timestamptz            `json:"sent_at"`
+	CreatedAt        pgtype.Timestamptz            `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz            `json:"updated_at"`
+}
+
+type AppNotificationReceipt struct {
+	ProviderTicketID string             `json:"provider_ticket_id"`
+	ReceivedAt       pgtype.Timestamptz `json:"received_at"`
+	Status           string             `json:"status"`
+	ErrorCode        pgtype.Text        `json:"error_code"`
+	SafeDetail       pgtype.Text        `json:"safe_detail"`
+	ProcessedAt      pgtype.Timestamptz `json:"processed_at"`
+}
+
+type AppPushToken struct {
+	ID              pgtype.UUID        `json:"id"`
+	InstallationID  pgtype.UUID        `json:"installation_id"`
+	TokenHash       string             `json:"token_hash"`
+	TokenCiphertext []byte             `json:"token_ciphertext"`
+	EncryptionKeyID string             `json:"encryption_key_id"`
+	Platform        string             `json:"platform"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
+	DisabledAt      pgtype.Timestamptz `json:"disabled_at"`
+	DisabledReason  pgtype.Text        `json:"disabled_reason"`
+}
+
+type AppSubscription struct {
+	ID               pgtype.UUID         `json:"id"`
+	InstallationID   pgtype.UUID         `json:"installation_id"`
+	SubscriptionType AppSubscriptionType `json:"subscription_type"`
+	RouteIds         []string            `json:"route_ids"`
+	StopIds          []string            `json:"stop_ids"`
+	ModeIds          []string            `json:"mode_ids"`
+	SourceIds        []string            `json:"source_ids"`
+	TripID           pgtype.Text         `json:"trip_id"`
+	RemindAt         pgtype.Timestamptz  `json:"remind_at"`
+	ExpiresAt        pgtype.Timestamptz  `json:"expires_at"`
+	QuietStart       pgtype.Time         `json:"quiet_start"`
+	QuietEnd         pgtype.Time         `json:"quiet_end"`
+	QuietTimeZone    pgtype.Text         `json:"quiet_time_zone"`
+	CreatedAt        pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz  `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz  `json:"deleted_at"`
 }
 
 type CatalogFeedVersion struct {

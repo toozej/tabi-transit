@@ -226,6 +226,11 @@ export function SavedView() {
       <Pressable accessibilityRole="button" onPress={clearRecents}>
         <Text>Clear recent selections</Text>
       </Pressable>
+      <Link href="/settings/notifications" asChild>
+        <Pressable accessibilityRole="link">
+          <Text>Notification settings</Text>
+        </Pressable>
+      </Link>
     </ScrollView>
   );
 }

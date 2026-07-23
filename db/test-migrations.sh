@@ -38,5 +38,11 @@ exception=$(psql_in_container -At -v ON_ERROR_STOP=1 -c "SELECT exception_type F
 [[ "$exception" == '2' ]] || { printf 'expected service-calendar exception, got: %s\n' "$exception" >&2; exit 1; }
 ready=$(psql_in_container -At -v ON_ERROR_STOP=1 -c "SELECT EXISTS (SELECT 1 FROM realtime.vehicle_current vehicle JOIN realtime.snapshots snapshot ON snapshot.id=vehicle.snapshot_id JOIN ops.source_health health ON health.source_id=vehicle.source_id WHERE snapshot.is_valid AND health.last_valid_snapshot_at IS NOT NULL)")
 [[ "$ready" == 't' ]] || { printf '%s\n' 'expected valid realtime snapshot readiness' >&2; exit 1; }
+notification_schema=$(psql_in_container -At -v ON_ERROR_STOP=1 -c "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='app' AND table_name='notification_deliveries')")
+[[ "$notification_schema" == 't' ]] || { printf '%s\n' 'expected notification delivery schema' >&2; exit 1; }
+token_plaintext=$(psql_in_container -At -v ON_ERROR_STOP=1 -c "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='app' AND table_name='push_tokens' AND column_name IN ('token', 'push_token', 'credential'))")
+[[ "$token_plaintext" == 'f' ]] || { printf '%s\n' 'push token table must not contain a plaintext token or credential column' >&2; exit 1; }
+dedupe_unique=$(psql_in_container -At -v ON_ERROR_STOP=1 -c "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='app' AND tablename='notification_deliveries' AND indexdef LIKE '%UNIQUE%' AND indexdef LIKE '%dedupe_key%')")
+[[ "$dedupe_unique" == 't' ]] || { printf '%s\n' 'expected unique notification delivery dedupe key' >&2; exit 1; }
 psql_in_container -v ON_ERROR_STOP=1 -c "EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) WITH input AS (SELECT ST_SetSRID(ST_MakePoint(-122.6700,45.5200),4326)::geography AS point) SELECT s.public_id FROM transit.stops s CROSS JOIN input WHERE s.feed_version_id=(SELECT id FROM catalog.feed_versions WHERE status='active') AND ST_DWithin(s.point,input.point,500) ORDER BY s.point <-> input.point,s.public_id LIMIT 10"
 printf '%s\n' 'WP-03 PostGIS migration and nearby/limitPerMode integration test passed.'

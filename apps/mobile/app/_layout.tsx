@@ -9,6 +9,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="stop/[stopId]" />
         <Stack.Screen name="route/[routeId]" />
+        <Stack.Screen name="settings/notifications" />
       </Stack>
     </AppProviders>
   );

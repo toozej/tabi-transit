@@ -6,9 +6,19 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	// Claiming is a single transaction statement. SKIP LOCKED permits independent
+	// workers without duplicate sends; claim_until recovers a crashed worker while
+	// the expiry predicate prevents a late time-sensitive retry.
+	ClaimNotificationDeliveries(ctx context.Context, arg ClaimNotificationDeliveriesParams) ([]ClaimNotificationDeliveriesRow, error)
+	DisablePushToken(ctx context.Context, arg DisablePushTokenParams) error
+	// Expired notifications are terminal. They must never be retried after a
+	// worker outage or a quiet-hours deferral.
+	ExpirePendingDeliveries(ctx context.Context, nowAt pgtype.Timestamptz) (int64, error)
 	GetActiveFeedVersion(ctx context.Context, sourceID string) (GetActiveFeedVersionRow, error)
 	GetCatalogRoute(ctx context.Context, publicID string) (GetCatalogRouteRow, error)
 	GetCatalogStop(ctx context.Context, publicID string) (GetCatalogStopRow, error)
@@ -18,6 +28,9 @@ type Querier interface {
 	// successful source-health record. A database connection alone is not enough
 	// to describe stale or absent transit data as ready.
 	HasReadyVehicleData(ctx context.Context) (bool, error)
+	// The unique dedupe_key is the concurrency boundary: concurrent workers may
+	// attempt the same event, but only one delivery is materialized.
+	InsertNotificationDelivery(ctx context.Context, arg InsertNotificationDeliveryParams) (pgtype.UUID, error)
 	// The public static endpoints currently combine enabled active feeds. The
 	// newest activation is the response version marker until the API exposes a
 	// multi-source static manifest.

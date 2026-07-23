@@ -407,10 +407,159 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/installations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create an opaque, no-account installation identity when notifications are enabled.
+     * @description The one-time `installationCredential` is an opaque secret returned only over TLS.
+     *     Clients keep it in platform secure storage. The API stores only a verifier and never
+     *     returns the credential again. This endpoint is disabled until encrypted persistence
+     *     and push-provider operations are approved.
+     */
+    post: operations["createInstallation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/installations/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete an installation and its push tokens, subscriptions, and deliveries. */
+    delete: operations["deleteInstallation"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/installations/{id}/push-token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Register or rotate a push token for an owned installation.
+     * @description The push token is write-only and is never included in a response or error.
+     */
+    put: operations["registerPushToken"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List notification subscriptions owned by the installation. */
+    get: operations["listSubscriptions"];
+    put?: never;
+    /**
+     * Create a scoped service-alert or one-shot departure-reminder subscription.
+     * @description Quiet hours use a validated IANA zone; expired or late time-sensitive notifications are dropped rather than queued.
+     */
+    post: operations["createSubscription"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/subscriptions/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete an installation-owned notification subscription. */
+    delete: operations["deleteSubscription"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Opaque installation ID; never a device identifier. */
+    InstallationId: string;
+    /** @description Opaque subscription ID. */
+    SubscriptionId: string;
+    /** @enum {string} */
+    MobilePlatform: "ios" | "android";
+    /** @description Validated IANA time-zone identifier, such as America/Los_Angeles. */
+    IanaTimeZone: string;
+    InstallationCreateRequest: {
+      platform: components["schemas"]["MobilePlatform"];
+      locale: string;
+      timeZone: components["schemas"]["IanaTimeZone"];
+      appVersion: string;
+    };
+    InstallationCreateResponse: {
+      installationId: components["schemas"]["InstallationId"];
+      /** @description One-time opaque credential. Store only in platform secure storage; never log or persist in fixtures. */
+      installationCredential: string;
+    };
+    PushTokenRegistration: {
+      platform: components["schemas"]["MobilePlatform"];
+      /** @description Write-only push token; never returned or logged. */
+      token: string;
+    };
+    /** @enum {string} */
+    NotificationSubscriptionType: "service_alert" | "departure_reminder";
+    QuietHours: {
+      /** @description Local wall-clock time in HH:mm. */
+      start: string;
+      /** @description Local wall-clock time in HH:mm. */
+      end: string;
+      timeZone: components["schemas"]["IanaTimeZone"];
+    };
+    /** @description service_alert needs at least one scope; departure_reminder needs tripId and remindAt before expiresAt. The server enforces per-installation limits and a maximum expiry window. */
+    SubscriptionCreateRequest: {
+      type: components["schemas"]["NotificationSubscriptionType"];
+      routeIds?: components["schemas"]["QualifiedId"][];
+      stopIds?: components["schemas"]["QualifiedId"][];
+      modes?: components["schemas"]["TransitMode"][];
+      sourceIds?: string[];
+      tripId?: components["schemas"]["QualifiedId"];
+      remindAt?: components["schemas"]["Timestamp"];
+      expiresAt: components["schemas"]["Timestamp"];
+      quietHours?: components["schemas"]["QuietHours"];
+    };
+    Subscription: components["schemas"]["SubscriptionCreateRequest"] & {
+      id: components["schemas"]["SubscriptionId"];
+    };
+    SubscriptionCollection: {
+      subscriptions: components["schemas"]["Subscription"][];
+    };
     HealthResponse: {
       /** @enum {string} */
       status: "ok";
@@ -1008,6 +1157,8 @@ export interface components {
     };
   };
   parameters: {
+    InstallationId: components["schemas"]["InstallationId"];
+    SubscriptionId: components["schemas"]["SubscriptionId"];
     IfNoneMatch: string;
     Latitude: number;
     Longitude: number;
@@ -1738,6 +1889,165 @@ export interface operations {
       };
       400: components["responses"]["ValidationError"];
       429: components["responses"]["ErrorResponse"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  createInstallation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InstallationCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Installation created; credential is returned exactly once. */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InstallationCreateResponse"];
+        };
+      };
+      400: components["responses"]["ValidationError"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  deleteInstallation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: components["parameters"]["InstallationId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installation and notification data deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["ErrorResponse"];
+      404: components["responses"]["NotFound"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  registerPushToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: components["parameters"]["InstallationId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PushTokenRegistration"];
+      };
+    };
+    responses: {
+      /** @description Push token registered or rotated. */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      400: components["responses"]["ValidationError"];
+      401: components["responses"]["ErrorResponse"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listSubscriptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installation-owned subscriptions, without push tokens. */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionCollection"];
+        };
+      };
+      401: components["responses"]["ErrorResponse"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  createSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubscriptionCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Subscription created. */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Subscription"];
+        };
+      };
+      400: components["responses"]["ValidationError"];
+      401: components["responses"]["ErrorResponse"];
+      409: components["responses"]["ErrorResponse"];
+      429: components["responses"]["ErrorResponse"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  deleteSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: components["parameters"]["SubscriptionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Subscription deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["ErrorResponse"];
+      404: components["responses"]["NotFound"];
       503: components["responses"]["FeatureUnavailable"];
       default: components["responses"]["ErrorResponse"];
     };

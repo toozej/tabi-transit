@@ -46,6 +46,19 @@ Copy `.env.example` to a local ignored environment file only when a restricted p
 
 WP-09 consumes the `src/maps/` adapter and replaces synthetic data with normalized API data after WP-07. Keep router files thin and preserve the equivalent accessible list/detail flow.
 
+## Fixture notifications foundation (WP-12)
+
+Notification settings are an accessible, local fixture surface for service-alert
+and departure-reminder subscriptions. They validate scope, IANA quiet-hour time
+zones, lead time, and expiry, and only use opaque IDs in notification links.
+The push adapter is explicitly unavailable: it requests neither OS permission
+nor an Expo push token, performs no network call, and does not deliver a real
+notification. Device permission, token registration/rotation, push receipts,
+and end-to-end delivery remain unverified device/backend gates. Mobile
+background policy only allows deferrable static/cache maintenance and
+subscription reconciliation—never location monitoring or continuous vehicle
+polling.
+
 ## Fixture trip planning foundation (WP-11)
 
 The Plan tab is a provider-independent planning shell. It offers deterministic

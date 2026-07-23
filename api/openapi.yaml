@@ -28,6 +28,8 @@ tags:
     description: Provider-neutral transit and place discovery for picker flows.
   - name: Journeys
     description: Feature-gated normalized A-to-B planning.
+  - name: Notifications
+    description: Feature-gated installation-owned notification preferences.
 security: []
 paths:
   /health/live:
@@ -769,7 +771,149 @@ paths:
         "429": { $ref: "#/components/responses/ErrorResponse" }
         "503": { $ref: "#/components/responses/FeatureUnavailable" }
         default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/installations:
+    post:
+      tags: [Notifications]
+      operationId: createInstallation
+      summary: Create an opaque, no-account installation identity when notifications are enabled.
+      description: |
+        The one-time `installationCredential` is an opaque secret returned only over TLS.
+        Clients keep it in platform secure storage. The API stores only a verifier and never
+        returns the credential again. This endpoint is disabled until encrypted persistence
+        and push-provider operations are approved.
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  { $ref: "#/components/schemas/InstallationCreateRequest" },
+              },
+          }
+      responses:
+        "201":
+          description: Installation created; credential is returned exactly once.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/InstallationCreateResponse" },
+                },
+            }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/installations/{id}:
+    delete:
+      tags: [Notifications]
+      operationId: deleteInstallation
+      summary: Delete an installation and its push tokens, subscriptions, and deliveries.
+      security: [{ InstallationCredential: [] }]
+      parameters: [{ $ref: "#/components/parameters/InstallationId" }]
+      responses:
+        "204": { description: Installation and notification data deleted. }
+        "401": { $ref: "#/components/responses/ErrorResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/installations/{id}/push-token:
+    put:
+      tags: [Notifications]
+      operationId: registerPushToken
+      summary: Register or rotate a push token for an owned installation.
+      description: The push token is write-only and is never included in a response or error.
+      security: [{ InstallationCredential: [] }]
+      parameters: [{ $ref: "#/components/parameters/InstallationId" }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              {
+                schema: { $ref: "#/components/schemas/PushTokenRegistration" },
+              },
+          }
+      responses:
+        "204": { description: Push token registered or rotated. }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/ErrorResponse" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/subscriptions:
+    get:
+      tags: [Notifications]
+      operationId: listSubscriptions
+      summary: List notification subscriptions owned by the installation.
+      security: [{ InstallationCredential: [] }]
+      responses:
+        "200":
+          description: Installation-owned subscriptions, without push tokens.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/SubscriptionCollection" },
+                },
+            }
+        "401": { $ref: "#/components/responses/ErrorResponse" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    post:
+      tags: [Notifications]
+      operationId: createSubscription
+      summary: Create a scoped service-alert or one-shot departure-reminder subscription.
+      description: Quiet hours use a validated IANA zone; expired or late time-sensitive notifications are dropped rather than queued.
+      security: [{ InstallationCredential: [] }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  { $ref: "#/components/schemas/SubscriptionCreateRequest" },
+              },
+          }
+      responses:
+        "201":
+          description: Subscription created.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Subscription" } },
+            }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/ErrorResponse" }
+        "409": { $ref: "#/components/responses/ErrorResponse" }
+        "429": { $ref: "#/components/responses/ErrorResponse" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/subscriptions/{id}:
+    delete:
+      tags: [Notifications]
+      operationId: deleteSubscription
+      summary: Delete an installation-owned notification subscription.
+      security: [{ InstallationCredential: [] }]
+      parameters: [{ $ref: "#/components/parameters/SubscriptionId" }]
+      responses:
+        "204": { description: Subscription deleted. }
+        "401": { $ref: "#/components/responses/ErrorResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
 components:
+  securitySchemes:
+    InstallationCredential:
+      type: apiKey
+      in: header
+      name: X-Tabi-Installation-Credential
+      description: Opaque installation credential. Never log, persist in fixtures, or return after installation registration.
   headers:
     RequestId:
       {
@@ -785,6 +929,20 @@ components:
     StaticFeedVersion:
       { description: Active static feed version., schema: { type: string } }
   parameters:
+    InstallationId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/InstallationId" },
+      }
+    SubscriptionId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/SubscriptionId" },
+      }
     IfNoneMatch: { name: If-None-Match, in: header, schema: { type: string } }
     Latitude:
       {
@@ -934,6 +1092,142 @@ components:
           },
       }
   schemas:
+    InstallationId:
+      {
+        type: string,
+        minLength: 3,
+        maxLength: 255,
+        pattern: "^[a-z0-9][a-z0-9_-]*:[A-Za-z0-9:_-]+$",
+        description: Opaque installation ID; never a device identifier.,
+      }
+    SubscriptionId:
+      {
+        type: string,
+        minLength: 3,
+        maxLength: 255,
+        pattern: "^[a-z0-9][a-z0-9_-]*:[A-Za-z0-9:_-]+$",
+        description: Opaque subscription ID.,
+      }
+    MobilePlatform: { type: string, enum: [ios, android] }
+    IanaTimeZone:
+      {
+        type: string,
+        minLength: 1,
+        maxLength: 100,
+        description: "Validated IANA time-zone identifier, such as America/Los_Angeles.",
+      }
+    InstallationCreateRequest:
+      type: object
+      required: [platform, locale, timeZone, appVersion]
+      additionalProperties: false
+      properties:
+        platform: { $ref: "#/components/schemas/MobilePlatform" }
+        locale: { type: string, minLength: 1, maxLength: 35 }
+        timeZone: { $ref: "#/components/schemas/IanaTimeZone" }
+        appVersion: { type: string, minLength: 1, maxLength: 100 }
+    InstallationCreateResponse:
+      type: object
+      required: [installationId, installationCredential]
+      properties:
+        installationId: { $ref: "#/components/schemas/InstallationId" }
+        installationCredential:
+          {
+            type: string,
+            minLength: 32,
+            maxLength: 1024,
+            x-tabi-sensitive: true,
+            description: One-time opaque credential. Store only in platform secure storage; never log or persist in fixtures.,
+          }
+    PushTokenRegistration:
+      type: object
+      required: [platform, token]
+      additionalProperties: false
+      properties:
+        platform: { $ref: "#/components/schemas/MobilePlatform" }
+        token:
+          {
+            type: string,
+            minLength: 8,
+            maxLength: 4096,
+            writeOnly: true,
+            description: Write-only push token; never returned or logged.,
+          }
+    NotificationSubscriptionType:
+      { type: string, enum: [service_alert, departure_reminder] }
+    QuietHours:
+      type: object
+      required: [start, end, timeZone]
+      additionalProperties: false
+      properties:
+        start:
+          {
+            type: string,
+            pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            description: Local wall-clock time in HH:mm.,
+          }
+        end:
+          {
+            type: string,
+            pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            description: Local wall-clock time in HH:mm.,
+          }
+        timeZone: { $ref: "#/components/schemas/IanaTimeZone" }
+    SubscriptionCreateRequest:
+      type: object
+      required: [type, expiresAt]
+      additionalProperties: false
+      properties:
+        type: { $ref: "#/components/schemas/NotificationSubscriptionType" }
+        routeIds:
+          {
+            type: array,
+            maxItems: 20,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/QualifiedId" },
+          }
+        stopIds:
+          {
+            type: array,
+            maxItems: 20,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/QualifiedId" },
+          }
+        modes:
+          {
+            type: array,
+            maxItems: 6,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/TransitMode" },
+          }
+        sourceIds:
+          {
+            type: array,
+            maxItems: 20,
+            uniqueItems: true,
+            items: { type: string, minLength: 1, maxLength: 128 },
+          }
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+        remindAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+        quietHours: { $ref: "#/components/schemas/QuietHours" }
+      description: service_alert needs at least one scope; departure_reminder needs tripId and remindAt before expiresAt. The server enforces per-installation limits and a maximum expiry window.
+    Subscription:
+      allOf:
+        - { $ref: "#/components/schemas/SubscriptionCreateRequest" }
+        - type: object
+          required: [id, type, expiresAt]
+          properties: { id: { $ref: "#/components/schemas/SubscriptionId" } }
+    SubscriptionCollection:
+      type: object
+      required: [subscriptions]
+      properties:
+        {
+          subscriptions:
+            {
+              type: array,
+              items: { $ref: "#/components/schemas/Subscription" },
+            },
+        }
     HealthResponse:
       {
         type: object,

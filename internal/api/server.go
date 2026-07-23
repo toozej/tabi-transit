@@ -42,6 +42,12 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 	r.Get("/health/ready", s.readiness)
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/config", s.getConfig)
+		r.Post("/installations", s.createInstallation)
+		r.Put("/installations/{id}/push-token", s.registerPushToken)
+		r.Delete("/installations/{id}", s.deleteInstallation)
+		r.Get("/subscriptions", s.listSubscriptions)
+		r.Post("/subscriptions", s.createSubscription)
+		r.Delete("/subscriptions/{id}", s.deleteSubscription)
 		r.Get("/search", s.placeSearch)
 		r.Get("/geocode/reverse", s.reverseGeocode)
 		r.Post("/journeys/plan", s.planJourney)
@@ -77,6 +83,28 @@ func (s *Server) reverseGeocode(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) planJourney(w http.ResponseWriter, r *http.Request) {
 	s.featureUnavailable(w, r, application.FeatureJourneyPlanner)
+}
+
+// Notification mutations intentionally fail before decoding credentials or
+// tokens. This avoids retaining sensitive values in memory or logs while the
+// encrypted persistence and push-provider decision gate remain incomplete.
+func (s *Server) createInstallation(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureNotifications)
+}
+func (s *Server) registerPushToken(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureNotifications)
+}
+func (s *Server) deleteInstallation(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureNotifications)
+}
+func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureNotifications)
+}
+func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureNotifications)
+}
+func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureNotifications)
 }
 func (s *Server) nearbyStops(w http.ResponseWriter, r *http.Request) {
 	lat, lon, ok := parseCoordinate(r, w)
@@ -449,7 +477,7 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	c := s.config.API
-	body := map[string]any{"apiVersion": c.Version, "minimumAppVersion": c.MinimumAppVersion, "features": map[string]any{"vehicleMap": map[string]any{"enabled": true}, "placeSearch": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "journeyPlanner": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}}, "sources": map[string]any{"trimetGtfsRt": map[string]any{"enabled": true}}, "pollingRecommendations": map[string]int{"vehiclesSeconds": 15}, "staleThresholdSeconds": map[string]int{"vehicles": c.StaleThresholdSeconds}, "serviceBounds": map[string]any{"bbox": []float64{-123, 45.3, -122.3, 45.8}}, "staticFeed": map[string]any{"version": c.StaticFeedVersion, "publishedAt": c.StaticFeedPublishedAt.UTC().Format(time.RFC3339)}}
+	body := map[string]any{"apiVersion": c.Version, "minimumAppVersion": c.MinimumAppVersion, "features": map[string]any{"vehicleMap": map[string]any{"enabled": true}, "placeSearch": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "journeyPlanner": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "notifications": map[string]any{"enabled": false, "reason": application.ReasonNotificationGatePending}}, "sources": map[string]any{"trimetGtfsRt": map[string]any{"enabled": true}}, "pollingRecommendations": map[string]int{"vehiclesSeconds": 15}, "staleThresholdSeconds": map[string]int{"vehicles": c.StaleThresholdSeconds}, "serviceBounds": map[string]any{"bbox": []float64{-123, 45.3, -122.3, 45.8}}, "staticFeed": map[string]any{"version": c.StaticFeedVersion, "publishedAt": c.StaticFeedPublishedAt.UTC().Format(time.RFC3339)}}
 	w.Header().Set("X-Api-Version", c.Version)
 	s.etag(w, r, body)
 }
