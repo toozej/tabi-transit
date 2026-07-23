@@ -1,0 +1,31 @@
+{
+  "alerts": [
+    {
+      "id": "trimet:alert:service-20",
+      "revision": "2026-07-22T16:00:00Z",
+      "header": "Service change",
+      "description": "Use posted stop information.",
+      "effect": "modified_service",
+      "severity": "warning",
+      "periods": [{ "startAt": "2026-07-22T16:00:00Z" }],
+      "informedEntities": [{ "routeId": "trimet:route:20" }],
+      "source": "trimet-gtfsrt-alerts",
+      "freshness": {
+        "source": "trimet-gtfsrt-alerts",
+        "fetchedAt": "2026-07-22T16:30:02Z",
+        "processedAt": "2026-07-22T16:30:02Z",
+        "status": "fresh",
+        "ageSeconds": 2,
+        "isRealtime": true
+      }
+    }
+  ],
+  "freshness": {
+    "source": "trimet-gtfsrt-alerts",
+    "fetchedAt": "2026-07-22T16:30:02Z",
+    "processedAt": "2026-07-22T16:30:02Z",
+    "status": "fresh",
+    "ageSeconds": 2,
+    "isRealtime": true
+  }
+}

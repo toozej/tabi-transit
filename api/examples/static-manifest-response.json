@@ -1,0 +1,21 @@
+{
+  "staticFeedVersion": "trimet-20260722",
+  "publishedAt": "2026-07-22T00:00:00Z",
+  "artifacts": [
+    {
+      "name": "stops",
+      "version": "trimet-20260722",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mediaType": "application/json",
+      "sizeBytes": 12345
+    }
+  ],
+  "freshness": {
+    "source": "trimet-gtfs",
+    "fetchedAt": "2026-07-22T16:30:02Z",
+    "processedAt": "2026-07-22T16:30:02Z",
+    "status": "fresh",
+    "ageSeconds": 0,
+    "isRealtime": false
+  }
+}

@@ -22,6 +22,8 @@ tags:
     description: Normalized static route data.
   - name: Vehicles
     description: Current normalized vehicle snapshots.
+  - name: Alerts
+    description: Normalized service alerts with preserved source semantics.
 security: []
 paths:
   /health/live:
@@ -81,7 +83,11 @@ paths:
               application/json:
                 {
                   schema: { $ref: "#/components/schemas/ConfigResponse" },
-                  example: { $ref: "#/components/examples/ConfigResponse" },
+                  examples:
+                    {
+                      response:
+                        { $ref: "#/components/examples/ConfigResponse" },
+                    },
                 },
             }
         "304": { $ref: "#/components/responses/NotModified" }
@@ -118,7 +124,11 @@ paths:
               application/json:
                 {
                   schema: { $ref: "#/components/schemas/RouteCollection" },
-                  example: { $ref: "#/components/examples/RouteCollection" },
+                  examples:
+                    {
+                      response:
+                        { $ref: "#/components/examples/RouteCollection" },
+                    },
                 },
             }
         "304": { $ref: "#/components/responses/NotModified" }
@@ -146,7 +156,11 @@ paths:
               application/json:
                 {
                   schema: { $ref: "#/components/schemas/StopCollection" },
-                  example: { $ref: "#/components/examples/StopCollection" },
+                  examples:
+                    {
+                      response:
+                        { $ref: "#/components/examples/StopCollection" },
+                    },
                 },
             }
         "400": { $ref: "#/components/responses/ValidationError" }
@@ -183,11 +197,344 @@ paths:
               application/json:
                 {
                   schema: { $ref: "#/components/schemas/NearbyStopsResponse" },
-                  example:
-                    { $ref: "#/components/examples/NearbyStopsResponse" },
+                  examples:
+                    {
+                      response:
+                        { $ref: "#/components/examples/NearbyStopsResponse" },
+                    },
                 },
             }
         "400": { $ref: "#/components/responses/ValidationError" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/stops/{id}:
+    get:
+      tags: [Stops]
+      operationId: getStop
+      summary: Get stable stop details, serving routes, and static freshness.
+      parameters:
+        - { $ref: "#/components/parameters/StopId" }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: A normalized stop; realtime arrivals are retrieved separately.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StopDetailResponse" }
+              examples:
+                {
+                  response:
+                    { $ref: "#/components/examples/StopDetailResponse" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/stops/{id}/arrivals:
+    get:
+      tags: [Stops]
+      operationId: listStopArrivals
+      summary: Get scheduled and, when available, estimated arrivals at a stop.
+      description: An estimated time is never fabricated. A stale response is explicitly marked and does not imply live tracking.
+      parameters:
+        - { $ref: "#/components/parameters/StopId" }
+        - name: minutes
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 240, default: 90 }
+        - name: routes
+          in: query
+          description: Comma-separated source-qualified route IDs.
+          schema: { type: string, maxLength: 2000 }
+        - name: directionId
+          in: query
+          schema: { type: integer, enum: [0, 1] }
+        - name: includeScheduled
+          in: query
+          schema: { type: boolean, default: true }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: Ordered upcoming arrivals, including their source freshness.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArrivalCollection" }
+              examples:
+                {
+                  response: { $ref: "#/components/examples/ArrivalCollection" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/SourceUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/stops/{id}/schedule:
+    get:
+      tags: [Stops]
+      operationId: listStopSchedule
+      summary: Get static scheduled stop times for one service date.
+      description: Times use the agency service-day calendar; service-day seconds may exceed 86400 after midnight.
+      parameters:
+        - { $ref: "#/components/parameters/StopId" }
+        - { $ref: "#/components/parameters/ServiceDateQuery" }
+        - name: routeId
+          in: query
+          schema: { $ref: "#/components/schemas/QualifiedId" }
+        - name: directionId
+          in: query
+          schema: { type: integer, enum: [0, 1] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: A stable page of static schedule times.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleCollection" }
+              examples:
+                {
+                  response:
+                    { $ref: "#/components/examples/ScheduleCollection" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/routes/{id}:
+    get:
+      tags: [Routes]
+      operationId: getRoute
+      summary: Get a route and its known directions.
+      parameters:
+        - { $ref: "#/components/parameters/RouteId" }
+        - { $ref: "#/components/parameters/ServiceDateQuery" }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: Static route details for the selected service date when supplied.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RouteDetailResponse" }
+              examples:
+                {
+                  response:
+                    { $ref: "#/components/examples/RouteDetailResponse" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/routes/{id}/shape:
+    get:
+      tags: [Routes]
+      operationId: getRouteShape
+      summary: Get a route shape as GeoJSON.
+      parameters:
+        - { $ref: "#/components/parameters/RouteId" }
+        - name: directionId
+          in: query
+          schema: { type: integer, enum: [0, 1] }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: A static route geometry. When more than one shape applies, features remain separately identified.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            application/geo+json:
+              schema:
+                { $ref: "#/components/schemas/RouteShapeFeatureCollection" }
+              examples:
+                {
+                  response:
+                    {
+                      $ref: "#/components/examples/RouteShapeFeatureCollection",
+                    },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/routes/{id}/stops:
+    get:
+      tags: [Routes]
+      operationId: listRouteStops
+      summary: Get ordered route stops for a direction and service date.
+      parameters:
+        - { $ref: "#/components/parameters/RouteId" }
+        - { $ref: "#/components/parameters/ServiceDateQuery" }
+        - name: directionId
+          in: query
+          schema: { type: integer, enum: [0, 1] }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: Ordered static route stops.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RouteStopCollection" }
+              examples:
+                {
+                  response:
+                    { $ref: "#/components/examples/RouteStopCollection" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/routes/{id}/vehicles:
+    get:
+      tags: [Routes, Vehicles]
+      operationId: listRouteVehicles
+      summary: Get current normalized vehicles for one route.
+      parameters:
+        - { $ref: "#/components/parameters/RouteId" }
+        - name: directionId
+          in: query
+          schema: { type: integer, enum: [0, 1] }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: Current route vehicles; stale data is explicitly marked.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleCollection" }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/SourceUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/static/manifest:
+    get:
+      tags: [Configuration]
+      operationId: getStaticManifest
+      summary: Get the versioned static-data manifest for offline synchronization.
+      description: The manifest only describes normalized static artifacts. Artifact URLs are optional until a storage and retention policy is approved.
+      parameters: [{ $ref: "#/components/parameters/IfNoneMatch" }]
+      responses:
+        "200":
+          description: A static feed manifest suitable for conditional mobile synchronization.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaticManifestResponse" }
+              examples:
+                {
+                  response:
+                    { $ref: "#/components/examples/StaticManifestResponse" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/alerts:
+    get:
+      tags: [Alerts]
+      operationId: listAlerts
+      summary: List normalized active or recently updated service alerts.
+      parameters:
+        - name: routes
+          in: query
+          schema: { type: string, maxLength: 2000 }
+        - name: stops
+          in: query
+          schema: { type: string, maxLength: 2000 }
+        - { $ref: "#/components/parameters/Modes" }
+        - name: effect
+          in: query
+          schema: { $ref: "#/components/schemas/AlertEffect" }
+        - name: active
+          in: query
+          schema: { type: boolean, default: true }
+        - name: updatedSince
+          in: query
+          schema: { $ref: "#/components/schemas/Timestamp" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: A page of alerts, preserving source wording where it is available.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertCollection" }
+              examples:
+                { response: { $ref: "#/components/examples/AlertCollection" } }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/alerts/{id}:
+    get:
+      tags: [Alerts]
+      operationId: getAlert
+      summary: Get one normalized alert revision.
+      parameters:
+        - { $ref: "#/components/parameters/AlertId" }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: An alert with source wording, affected entities, active periods, and freshness.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertDetailResponse" }
+              examples:
+                {
+                  response:
+                    { $ref: "#/components/examples/AlertDetailResponse" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
         default: { $ref: "#/components/responses/ErrorResponse" }
   /v1/vehicles:
     get:
@@ -271,8 +618,11 @@ paths:
                 {
                   schema:
                     { $ref: "#/components/schemas/VehicleSearchResponse" },
-                  example:
-                    { $ref: "#/components/examples/VehicleSearchResponse" },
+                  examples:
+                    {
+                      response:
+                        { $ref: "#/components/examples/VehicleSearchResponse" },
+                    },
                 },
             }
         "400": { $ref: "#/components/responses/ValidationError" }
@@ -301,8 +651,11 @@ paths:
                 {
                   schema:
                     { $ref: "#/components/schemas/VehicleDetailResponse" },
-                  example:
-                    { $ref: "#/components/examples/VehicleDetailResponse" },
+                  examples:
+                    {
+                      response:
+                        { $ref: "#/components/examples/VehicleDetailResponse" },
+                    },
                 },
             }
         "304": { $ref: "#/components/responses/NotModified" }
@@ -370,6 +723,33 @@ components:
         required: true,
         schema: { $ref: "#/components/schemas/QualifiedId" },
       }
+    StopId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/QualifiedId" },
+      }
+    RouteId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/QualifiedId" },
+      }
+    AlertId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/QualifiedId" },
+      }
+    ServiceDateQuery:
+      {
+        name: serviceDate,
+        in: query,
+        schema: { $ref: "#/components/schemas/ServiceDate" },
+      }
   responses:
     NotModified: { description: Representation is unchanged. }
     ValidationError:
@@ -380,7 +760,10 @@ components:
             application/json:
               {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
-                example: { $ref: "#/components/examples/ValidationError" },
+                examples:
+                  {
+                    response: { $ref: "#/components/examples/ValidationError" },
+                  },
               },
           },
       }
@@ -392,7 +775,8 @@ components:
             application/json:
               {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
-                example: { $ref: "#/components/examples/NotFound" },
+                examples:
+                  { response: { $ref: "#/components/examples/NotFound" } },
               },
           },
       }
@@ -405,7 +789,11 @@ components:
             application/json:
               {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
-                example: { $ref: "#/components/examples/SourceUnavailable" },
+                examples:
+                  {
+                    response:
+                      { $ref: "#/components/examples/SourceUnavailable" },
+                  },
               },
           },
       }
@@ -628,6 +1016,287 @@ components:
             freshness: { $ref: "#/components/schemas/Freshness" },
           },
       }
+    StopDetailResponse:
+      {
+        type: object,
+        required: [stop, staticFeedVersion, freshness],
+        properties:
+          {
+            stop: { $ref: "#/components/schemas/Stop" },
+            staticFeedVersion: { type: string },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    ArrivalStatus:
+      {
+        type: string,
+        enum: [scheduled, estimated, cancelled, skipped, unknown],
+      }
+    Arrival:
+      type: object
+      required: [id, stopId, routeId, status, scheduledAt, freshness]
+      properties:
+        id:
+          {
+            type: string,
+            maxLength: 255,
+            description: Stable arrival instance ID for this response window.,
+          }
+        stopId: { $ref: "#/components/schemas/QualifiedId" }
+        routeId: { $ref: "#/components/schemas/QualifiedId" }
+        directionId: { type: integer, enum: [0, 1] }
+        headsign: { type: string, maxLength: 500 }
+        scheduledAt: { $ref: "#/components/schemas/Timestamp" }
+        estimatedAt: { $ref: "#/components/schemas/Timestamp" }
+        status: { $ref: "#/components/schemas/ArrivalStatus" }
+        vehicleId: { $ref: "#/components/schemas/QualifiedId" }
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+        stopSequence: { type: integer, minimum: 0 }
+        alertIds:
+          { type: array, items: { $ref: "#/components/schemas/QualifiedId" } }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    ArrivalCollection:
+      {
+        type: object,
+        required: [stopId, arrivals, freshness],
+        properties:
+          {
+            stopId: { $ref: "#/components/schemas/QualifiedId" },
+            arrivals:
+              { type: array, items: { $ref: "#/components/schemas/Arrival" } },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    ScheduleTime:
+      type: object
+      required: [tripId, routeId, stopId, serviceDate, serviceDaySeconds]
+      properties:
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+        routeId: { $ref: "#/components/schemas/QualifiedId" }
+        stopId: { $ref: "#/components/schemas/QualifiedId" }
+        directionId: { type: integer, enum: [0, 1] }
+        headsign: { type: string, maxLength: 500 }
+        serviceDate: { $ref: "#/components/schemas/ServiceDate" }
+        serviceDaySeconds:
+          {
+            type: integer,
+            minimum: 0,
+            maximum: 172799,
+            description: Seconds since service-day midnight; may exceed 86400.,
+          }
+        departureAt: { $ref: "#/components/schemas/Timestamp" }
+    ScheduleCollection:
+      {
+        type: object,
+        required: [stopId, serviceDate, staticFeedVersion, schedule],
+        properties:
+          {
+            stopId: { $ref: "#/components/schemas/QualifiedId" },
+            serviceDate: { $ref: "#/components/schemas/ServiceDate" },
+            staticFeedVersion: { type: string },
+            schedule:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/ScheduleTime" },
+              },
+            nextCursor: { type: string },
+          },
+      }
+    RouteDirection:
+      {
+        type: object,
+        required: [directionId],
+        properties:
+          {
+            directionId: { type: integer, enum: [0, 1] },
+            headsign: { type: string, maxLength: 500 },
+          },
+      }
+    RouteDetailResponse:
+      {
+        type: object,
+        required: [route, directions, staticFeedVersion, freshness],
+        properties:
+          {
+            route: { $ref: "#/components/schemas/Route" },
+            directions:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/RouteDirection" },
+              },
+            staticFeedVersion: { type: string },
+            alertIds:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/QualifiedId" },
+              },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    RouteShapeFeature:
+      type: object
+      required: [type, geometry, properties]
+      properties:
+        type: { type: string, enum: [Feature] }
+        geometry:
+          type: object
+          required: [type, coordinates]
+          properties:
+            type: { type: string, enum: [LineString] }
+            coordinates:
+              {
+                type: array,
+                minItems: 2,
+                items: { $ref: "#/components/schemas/Coordinate" },
+              }
+        properties:
+          type: object
+          required: [shapeId, routeId]
+          properties:
+            shapeId: { $ref: "#/components/schemas/QualifiedId" }
+            routeId: { $ref: "#/components/schemas/QualifiedId" }
+            directionId: { type: integer, enum: [0, 1] }
+    RouteShapeFeatureCollection:
+      {
+        type: object,
+        required: [type, features, staticFeedVersion],
+        properties:
+          {
+            type: { type: string, enum: [FeatureCollection] },
+            features:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/RouteShapeFeature" },
+              },
+            staticFeedVersion: { type: string },
+          },
+      }
+    RouteStop:
+      {
+        allOf:
+          [
+            { $ref: "#/components/schemas/Stop" },
+            {
+              type: object,
+              required: [sequence],
+              properties: { sequence: { type: integer, minimum: 0 } },
+            },
+          ],
+      }
+    RouteStopCollection:
+      {
+        type: object,
+        required: [routeId, stops, staticFeedVersion],
+        properties:
+          {
+            routeId: { $ref: "#/components/schemas/QualifiedId" },
+            directionId: { type: integer, enum: [0, 1] },
+            stops:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/RouteStop" },
+              },
+            staticFeedVersion: { type: string },
+          },
+      }
+    StaticArtifact:
+      type: object
+      required: [name, version, sha256, mediaType, sizeBytes]
+      properties:
+        name: { type: string, enum: [stops, routes, schedules, shapes] }
+        version: { type: string }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        mediaType: { type: string, enum: [application/json] }
+        sizeBytes: { type: integer, minimum: 0 }
+        url:
+          {
+            type: string,
+            format: uri,
+            description: Optional only after artifact storage policy approval.,
+          }
+    StaticManifestResponse:
+      {
+        type: object,
+        required: [staticFeedVersion, publishedAt, artifacts, freshness],
+        properties:
+          {
+            staticFeedVersion: { type: string },
+            publishedAt: { $ref: "#/components/schemas/Timestamp" },
+            artifacts:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/StaticArtifact" },
+              },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    AlertEffect:
+      {
+        type: string,
+        enum:
+          [
+            no_service,
+            reduced_service,
+            significant_delays,
+            detour,
+            stop_moved,
+            modified_service,
+            other,
+            unknown,
+          ],
+      }
+    AlertSeverity: { type: string, enum: [info, warning, severe, unknown] }
+    AlertPeriod:
+      type: object
+      properties:
+        startAt: { $ref: "#/components/schemas/Timestamp" }
+        endAt: { $ref: "#/components/schemas/Timestamp" }
+    AlertEntity:
+      type: object
+      properties:
+        routeId: { $ref: "#/components/schemas/QualifiedId" }
+        stopId: { $ref: "#/components/schemas/QualifiedId" }
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+    Alert:
+      type: object
+      required: [id, revision, header, periods, source, freshness]
+      properties:
+        id: { $ref: "#/components/schemas/QualifiedId" }
+        revision: { type: string, maxLength: 255 }
+        header: { type: string, maxLength: 2000 }
+        description: { type: string, maxLength: 10000 }
+        cause: { type: string, maxLength: 500 }
+        effect: { $ref: "#/components/schemas/AlertEffect" }
+        severity: { $ref: "#/components/schemas/AlertSeverity" }
+        periods:
+          {
+            type: array,
+            minItems: 1,
+            items: { $ref: "#/components/schemas/AlertPeriod" },
+          }
+        informedEntities:
+          { type: array, items: { $ref: "#/components/schemas/AlertEntity" } }
+        sourceUrl: { type: string, format: uri }
+        source: { type: string, maxLength: 128 }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    AlertCollection:
+      {
+        type: object,
+        required: [alerts, freshness],
+        properties:
+          {
+            alerts:
+              { type: array, items: { $ref: "#/components/schemas/Alert" } },
+            nextCursor: { type: string },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    AlertDetailResponse:
+      {
+        type: object,
+        required: [alert],
+        properties: { alert: { $ref: "#/components/schemas/Alert" } },
+      }
     Vehicle:
       type: object
       required: [id, sourceVehicleId, mode, coordinate, inService, freshness]
@@ -786,6 +1455,179 @@ components:
           },
       }
   examples:
+    StopDetailResponse:
+      value:
+        stop:
+          id: "trimet:stop:8334"
+          name: "W Burnside & NW 5th"
+          coordinate: [-122.676, 45.523]
+          modes: [bus]
+          routeIds: ["trimet:route:20"]
+          wheelchairAccessible: true
+        staticFeedVersion: trimet-20260722
+        freshness:
+          source: trimet-gtfs
+          fetchedAt: "2026-07-22T16:30:02Z"
+          processedAt: "2026-07-22T16:30:02Z"
+          status: fresh
+          ageSeconds: 0
+          isRealtime: false
+    ArrivalCollection:
+      value:
+        stopId: "trimet:stop:8334"
+        arrivals:
+          - id: "trimet:arrival:8334:20:20260722T164500Z"
+            stopId: "trimet:stop:8334"
+            routeId: "trimet:route:20"
+            directionId: 1
+            headsign: Gresham
+            scheduledAt: "2026-07-22T16:45:00Z"
+            estimatedAt: "2026-07-22T16:47:00Z"
+            status: estimated
+            vehicleId: "trimet:vehicle:2901"
+            tripId: "trimet:trip:20-1"
+            stopSequence: 12
+            alertIds: []
+            freshness:
+              source: trimet-web-services
+              fetchedAt: "2026-07-22T16:30:02Z"
+              processedAt: "2026-07-22T16:30:02Z"
+              status: aging
+              ageSeconds: 35
+              isRealtime: true
+        freshness:
+          source: trimet-web-services
+          fetchedAt: "2026-07-22T16:30:02Z"
+          processedAt: "2026-07-22T16:30:02Z"
+          status: aging
+          ageSeconds: 35
+          isRealtime: true
+    ScheduleCollection:
+      value:
+        stopId: "trimet:stop:8334"
+        serviceDate: "2026-07-22"
+        staticFeedVersion: trimet-20260722
+        schedule:
+          - tripId: "trimet:trip:20-1"
+            routeId: "trimet:route:20"
+            stopId: "trimet:stop:8334"
+            directionId: 1
+            headsign: Gresham
+            serviceDate: "2026-07-22"
+            serviceDaySeconds: 60300
+            departureAt: "2026-07-22T16:45:00Z"
+    RouteDetailResponse:
+      value:
+        route:
+          id: "trimet:route:20"
+          mode: bus
+          shortName: "20"
+          longName: "Burnside/Stark"
+          color: "0066CC"
+        directions:
+          - directionId: 0
+            headsign: "Beaverton Transit Center"
+          - directionId: 1
+            headsign: Gresham
+        staticFeedVersion: trimet-20260722
+        alertIds: []
+        freshness:
+          source: trimet-gtfs
+          fetchedAt: "2026-07-22T16:30:02Z"
+          processedAt: "2026-07-22T16:30:02Z"
+          status: fresh
+          ageSeconds: 0
+          isRealtime: false
+    RouteShapeFeatureCollection:
+      value:
+        type: FeatureCollection
+        features:
+          - type: Feature
+            geometry:
+              type: LineString
+              coordinates: [[-122.676, 45.523], [-122.67, 45.52]]
+            properties:
+              shapeId: "trimet:shape:20-1"
+              routeId: "trimet:route:20"
+              directionId: 1
+        staticFeedVersion: trimet-20260722
+    RouteStopCollection:
+      value:
+        routeId: "trimet:route:20"
+        directionId: 1
+        stops:
+          - id: "trimet:stop:8334"
+            name: "W Burnside & NW 5th"
+            coordinate: [-122.676, 45.523]
+            modes: [bus]
+            sequence: 12
+        staticFeedVersion: trimet-20260722
+    StaticManifestResponse:
+      value:
+        staticFeedVersion: trimet-20260722
+        publishedAt: "2026-07-22T00:00:00Z"
+        artifacts:
+          - name: stops
+            version: trimet-20260722
+            sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            mediaType: application/json
+            sizeBytes: 12345
+        freshness:
+          source: trimet-gtfs
+          fetchedAt: "2026-07-22T16:30:02Z"
+          processedAt: "2026-07-22T16:30:02Z"
+          status: fresh
+          ageSeconds: 0
+          isRealtime: false
+    AlertCollection:
+      value:
+        alerts:
+          - id: "trimet:alert:service-20"
+            revision: "2026-07-22T16:00:00Z"
+            header: "Service change"
+            description: "Use posted stop information."
+            effect: modified_service
+            severity: warning
+            periods:
+              - startAt: "2026-07-22T16:00:00Z"
+            informedEntities:
+              - routeId: "trimet:route:20"
+            source: trimet-gtfsrt-alerts
+            freshness:
+              source: trimet-gtfsrt-alerts
+              fetchedAt: "2026-07-22T16:30:02Z"
+              processedAt: "2026-07-22T16:30:02Z"
+              status: fresh
+              ageSeconds: 2
+              isRealtime: true
+        freshness:
+          source: trimet-gtfsrt-alerts
+          fetchedAt: "2026-07-22T16:30:02Z"
+          processedAt: "2026-07-22T16:30:02Z"
+          status: fresh
+          ageSeconds: 2
+          isRealtime: true
+    AlertDetailResponse:
+      value:
+        alert:
+          id: "trimet:alert:service-20"
+          revision: "2026-07-22T16:00:00Z"
+          header: "Service change"
+          description: "Use posted stop information."
+          effect: modified_service
+          severity: warning
+          periods:
+            - startAt: "2026-07-22T16:00:00Z"
+          informedEntities:
+            - routeId: "trimet:route:20"
+          source: trimet-gtfsrt-alerts
+          freshness:
+            source: trimet-gtfsrt-alerts
+            fetchedAt: "2026-07-22T16:30:02Z"
+            processedAt: "2026-07-22T16:30:02Z"
+            status: fresh
+            ageSeconds: 2
+            isRealtime: true
     ConfigResponse:
       {
         value:

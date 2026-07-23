@@ -109,6 +109,185 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/stops/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get stable stop details, serving routes, and static freshness. */
+    get: operations["getStop"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/stops/{id}/arrivals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get scheduled and, when available, estimated arrivals at a stop.
+     * @description An estimated time is never fabricated. A stale response is explicitly marked and does not imply live tracking.
+     */
+    get: operations["listStopArrivals"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/stops/{id}/schedule": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get static scheduled stop times for one service date.
+     * @description Times use the agency service-day calendar; service-day seconds may exceed 86400 after midnight.
+     */
+    get: operations["listStopSchedule"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/routes/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a route and its known directions. */
+    get: operations["getRoute"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/routes/{id}/shape": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a route shape as GeoJSON. */
+    get: operations["getRouteShape"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/routes/{id}/stops": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get ordered route stops for a direction and service date. */
+    get: operations["listRouteStops"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/routes/{id}/vehicles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get current normalized vehicles for one route. */
+    get: operations["listRouteVehicles"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/static/manifest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get the versioned static-data manifest for offline synchronization.
+     * @description The manifest only describes normalized static artifacts. Artifact URLs are optional until a storage and retention policy is approved.
+     */
+    get: operations["getStaticManifest"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/alerts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List normalized active or recently updated service alerts. */
+    get: operations["listAlerts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/alerts/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get one normalized alert revision. */
+    get: operations["getAlert"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/vehicles": {
     parameters: {
       query?: never;
@@ -267,6 +446,166 @@ export interface components {
       groups: components["schemas"]["NearbyStopGroup"][];
       freshness: components["schemas"]["Freshness"];
     };
+    StopDetailResponse: {
+      stop: components["schemas"]["Stop"];
+      staticFeedVersion: string;
+      freshness: components["schemas"]["Freshness"];
+    };
+    /** @enum {string} */
+    ArrivalStatus:
+      | "scheduled"
+      | "estimated"
+      | "cancelled"
+      | "skipped"
+      | "unknown";
+    Arrival: {
+      /** @description Stable arrival instance ID for this response window. */
+      id: string;
+      stopId: components["schemas"]["QualifiedId"];
+      routeId: components["schemas"]["QualifiedId"];
+      /** @enum {integer} */
+      directionId?: 0 | 1;
+      headsign?: string;
+      scheduledAt: components["schemas"]["Timestamp"];
+      estimatedAt?: components["schemas"]["Timestamp"];
+      status: components["schemas"]["ArrivalStatus"];
+      vehicleId?: components["schemas"]["QualifiedId"];
+      tripId?: components["schemas"]["QualifiedId"];
+      stopSequence?: number;
+      alertIds?: components["schemas"]["QualifiedId"][];
+      freshness: components["schemas"]["Freshness"];
+    };
+    ArrivalCollection: {
+      stopId: components["schemas"]["QualifiedId"];
+      arrivals: components["schemas"]["Arrival"][];
+      freshness: components["schemas"]["Freshness"];
+    };
+    ScheduleTime: {
+      tripId: components["schemas"]["QualifiedId"];
+      routeId: components["schemas"]["QualifiedId"];
+      stopId: components["schemas"]["QualifiedId"];
+      /** @enum {integer} */
+      directionId?: 0 | 1;
+      headsign?: string;
+      serviceDate: components["schemas"]["ServiceDate"];
+      /** @description Seconds since service-day midnight; may exceed 86400. */
+      serviceDaySeconds: number;
+      departureAt?: components["schemas"]["Timestamp"];
+    };
+    ScheduleCollection: {
+      stopId: components["schemas"]["QualifiedId"];
+      serviceDate: components["schemas"]["ServiceDate"];
+      staticFeedVersion: string;
+      schedule: components["schemas"]["ScheduleTime"][];
+      nextCursor?: string;
+    };
+    RouteDirection: {
+      /** @enum {integer} */
+      directionId: 0 | 1;
+      headsign?: string;
+    };
+    RouteDetailResponse: {
+      route: components["schemas"]["Route"];
+      directions: components["schemas"]["RouteDirection"][];
+      staticFeedVersion: string;
+      alertIds?: components["schemas"]["QualifiedId"][];
+      freshness: components["schemas"]["Freshness"];
+    };
+    RouteShapeFeature: {
+      /** @enum {string} */
+      type: "Feature";
+      geometry: {
+        /** @enum {string} */
+        type: "LineString";
+        coordinates: components["schemas"]["Coordinate"][];
+      };
+      properties: {
+        shapeId: components["schemas"]["QualifiedId"];
+        routeId: components["schemas"]["QualifiedId"];
+        /** @enum {integer} */
+        directionId?: 0 | 1;
+      };
+    };
+    RouteShapeFeatureCollection: {
+      /** @enum {string} */
+      type: "FeatureCollection";
+      features: components["schemas"]["RouteShapeFeature"][];
+      staticFeedVersion: string;
+    };
+    RouteStop: components["schemas"]["Stop"] & {
+      sequence: number;
+    };
+    RouteStopCollection: {
+      routeId: components["schemas"]["QualifiedId"];
+      /** @enum {integer} */
+      directionId?: 0 | 1;
+      stops: components["schemas"]["RouteStop"][];
+      staticFeedVersion: string;
+    };
+    StaticArtifact: {
+      /** @enum {string} */
+      name: "stops" | "routes" | "schedules" | "shapes";
+      version: string;
+      sha256: string;
+      /** @enum {string} */
+      mediaType: "application/json";
+      sizeBytes: number;
+      /**
+       * Format: uri
+       * @description Optional only after artifact storage policy approval.
+       */
+      url?: string;
+    };
+    StaticManifestResponse: {
+      staticFeedVersion: string;
+      publishedAt: components["schemas"]["Timestamp"];
+      artifacts: components["schemas"]["StaticArtifact"][];
+      freshness: components["schemas"]["Freshness"];
+    };
+    /** @enum {string} */
+    AlertEffect:
+      | "no_service"
+      | "reduced_service"
+      | "significant_delays"
+      | "detour"
+      | "stop_moved"
+      | "modified_service"
+      | "other"
+      | "unknown";
+    /** @enum {string} */
+    AlertSeverity: "info" | "warning" | "severe" | "unknown";
+    AlertPeriod: {
+      startAt?: components["schemas"]["Timestamp"];
+      endAt?: components["schemas"]["Timestamp"];
+    };
+    AlertEntity: {
+      routeId?: components["schemas"]["QualifiedId"];
+      stopId?: components["schemas"]["QualifiedId"];
+      tripId?: components["schemas"]["QualifiedId"];
+    };
+    Alert: {
+      id: components["schemas"]["QualifiedId"];
+      revision: string;
+      header: string;
+      description?: string;
+      cause?: string;
+      effect?: components["schemas"]["AlertEffect"];
+      severity?: components["schemas"]["AlertSeverity"];
+      periods: components["schemas"]["AlertPeriod"][];
+      informedEntities?: components["schemas"]["AlertEntity"][];
+      /** Format: uri */
+      sourceUrl?: string;
+      source: string;
+      freshness: components["schemas"]["Freshness"];
+    };
+    AlertCollection: {
+      alerts: components["schemas"]["Alert"][];
+      nextCursor?: string;
+      freshness: components["schemas"]["Freshness"];
+    };
+    AlertDetailResponse: {
+      alert: components["schemas"]["Alert"];
+    };
     Vehicle: {
       id: components["schemas"]["QualifiedId"];
       sourceVehicleId: string;
@@ -361,24 +700,6 @@ export interface components {
         [name: string]: unknown;
       };
       content: {
-        /**
-         * @example {
-         *       "value": {
-         *         "error": {
-         *           "code": "validation_error",
-         *           "message": "lat must be between -90 and 90.",
-         *           "requestId": "req_invalid_01",
-         *           "details": [
-         *             {
-         *               "field": "lat",
-         *               "code": "range",
-         *               "message": "Must be between -90 and 90."
-         *             }
-         *           ]
-         *         }
-         *       }
-         *     }
-         */
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
@@ -388,17 +709,6 @@ export interface components {
         [name: string]: unknown;
       };
       content: {
-        /**
-         * @example {
-         *       "value": {
-         *         "error": {
-         *           "code": "not_found",
-         *           "message": "Vehicle not found.",
-         *           "requestId": "req_notfound_01"
-         *         }
-         *       }
-         *     }
-         */
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
@@ -409,20 +719,6 @@ export interface components {
         [name: string]: unknown;
       };
       content: {
-        /**
-         * @example {
-         *       "value": {
-         *         "error": {
-         *           "code": "source_unavailable",
-         *           "message": "Vehicle positions are temporarily unavailable.",
-         *           "requestId": "req_source_01",
-         *           "retryAfterSeconds": 30,
-         *           "source": "trimet-gtfsrt-vehicle-positions",
-         *           "details": []
-         *         }
-         *       }
-         *     }
-         */
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
@@ -455,6 +751,10 @@ export interface components {
     /** @description Comma-separated modes. */
     Modes: string;
     VehicleId: components["schemas"]["QualifiedId"];
+    StopId: components["schemas"]["QualifiedId"];
+    RouteId: components["schemas"]["QualifiedId"];
+    AlertId: components["schemas"]["QualifiedId"];
+    ServiceDateQuery: components["schemas"]["ServiceDate"];
   };
   requestBodies: never;
   headers: {
@@ -548,54 +848,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /**
-           * @example {
-           *       "value": {
-           *         "apiVersion": "0.1.0",
-           *         "minimumAppVersion": "0.1.0",
-           *         "features": {
-           *           "vehicleMap": {
-           *             "enabled": true
-           *           },
-           *           "planner": {
-           *             "enabled": false,
-           *             "reason": "provider credential unavailable"
-           *           }
-           *         },
-           *         "sources": {
-           *           "trimetGtfsRt": {
-           *             "enabled": true
-           *           },
-           *           "streetcar": {
-           *             "enabled": false,
-           *             "reason": "approval pending"
-           *           }
-           *         },
-           *         "pollingRecommendations": {
-           *           "vehiclesSeconds": 15
-           *         },
-           *         "staleThresholdSeconds": {
-           *           "vehicles": 90
-           *         },
-           *         "serviceBounds": {
-           *           "bbox": [
-           *             -123,
-           *             45.3,
-           *             -122.3,
-           *             45.8
-           *           ]
-           *         },
-           *         "staticFeed": {
-           *           "version": "trimet-20260722",
-           *           "publishedAt": "2026-07-22T00:00:00Z"
-           *         },
-           *         "urls": {
-           *           "privacy": "https://example.invalid/privacy",
-           *           "credits": "https://example.invalid/credits"
-           *         }
-           *       }
-           *     }
-           */
           "application/json": components["schemas"]["ConfigResponse"];
         };
       };
@@ -632,22 +884,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /**
-           * @example {
-           *       "value": {
-           *         "routes": [
-           *           {
-           *             "id": "trimet:route:20",
-           *             "mode": "bus",
-           *             "shortName": "20",
-           *             "longName": "Burnside/Stark",
-           *             "color": "0066CC"
-           *           }
-           *         ],
-           *         "staticFeedVersion": "trimet-20260722"
-           *       }
-           *     }
-           */
           "application/json": components["schemas"]["RouteCollection"];
         };
       };
@@ -679,29 +915,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /**
-           * @example {
-           *       "value": {
-           *         "stops": [
-           *           {
-           *             "id": "trimet:stop:8334",
-           *             "name": "W Burnside & NW 5th",
-           *             "coordinate": [
-           *               -122.676,
-           *               45.523
-           *             ],
-           *             "modes": [
-           *               "bus"
-           *             ],
-           *             "routeIds": [
-           *               "trimet:route:20"
-           *             ],
-           *             "wheelchairAccessible": true
-           *           }
-           *         ]
-           *       }
-           *     }
-           */
           "application/json": components["schemas"]["StopCollection"];
         };
       };
@@ -735,44 +948,338 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /**
-           * @example {
-           *       "value": {
-           *         "distanceType": "straight_line",
-           *         "groups": [
-           *           {
-           *             "mode": "bus",
-           *             "stops": [
-           *               {
-           *                 "id": "trimet:stop:8334",
-           *                 "name": "W Burnside & NW 5th",
-           *                 "coordinate": [
-           *                   -122.676,
-           *                   45.523
-           *                 ],
-           *                 "modes": [
-           *                   "bus"
-           *                 ],
-           *                 "distanceMeters": 120
-           *               }
-           *             ]
-           *           }
-           *         ],
-           *         "freshness": {
-           *           "source": "trimet-gtfs",
-           *           "fetchedAt": "2026-07-22T16:30:02Z",
-           *           "processedAt": "2026-07-22T16:30:02Z",
-           *           "status": "fresh",
-           *           "ageSeconds": 0,
-           *           "isRealtime": false
-           *         }
-           *       }
-           *     }
-           */
           "application/json": components["schemas"]["NearbyStopsResponse"];
         };
       };
       400: components["responses"]["ValidationError"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getStop: {
+    parameters: {
+      query?: never;
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["StopId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A normalized stop; realtime arrivals are retrieved separately. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          "X-Static-Feed-Version": components["headers"]["StaticFeedVersion"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StopDetailResponse"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listStopArrivals: {
+    parameters: {
+      query?: {
+        minutes?: number;
+        /** @description Comma-separated source-qualified route IDs. */
+        routes?: string;
+        directionId?: 0 | 1;
+        includeScheduled?: boolean;
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["StopId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ordered upcoming arrivals, including their source freshness. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ArrivalCollection"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      400: components["responses"]["ValidationError"];
+      404: components["responses"]["NotFound"];
+      503: components["responses"]["SourceUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listStopSchedule: {
+    parameters: {
+      query?: {
+        serviceDate?: components["parameters"]["ServiceDateQuery"];
+        routeId?: components["schemas"]["QualifiedId"];
+        directionId?: 0 | 1;
+        limit?: components["parameters"]["Limit"];
+        /** @description Opaque cursor returned by a prior response. */
+        cursor?: components["parameters"]["Cursor"];
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["StopId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A stable page of static schedule times. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          "X-Static-Feed-Version": components["headers"]["StaticFeedVersion"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScheduleCollection"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      400: components["responses"]["ValidationError"];
+      404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getRoute: {
+    parameters: {
+      query?: {
+        serviceDate?: components["parameters"]["ServiceDateQuery"];
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["RouteId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Static route details for the selected service date when supplied. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          "X-Static-Feed-Version": components["headers"]["StaticFeedVersion"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RouteDetailResponse"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getRouteShape: {
+    parameters: {
+      query?: {
+        directionId?: 0 | 1;
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["RouteId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A static route geometry. When more than one shape applies, features remain separately identified. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          "X-Static-Feed-Version": components["headers"]["StaticFeedVersion"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/geo+json": components["schemas"]["RouteShapeFeatureCollection"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listRouteStops: {
+    parameters: {
+      query?: {
+        serviceDate?: components["parameters"]["ServiceDateQuery"];
+        directionId?: 0 | 1;
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["RouteId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ordered static route stops. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          "X-Static-Feed-Version": components["headers"]["StaticFeedVersion"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RouteStopCollection"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listRouteVehicles: {
+    parameters: {
+      query?: {
+        directionId?: 0 | 1;
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["RouteId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current route vehicles; stale data is explicitly marked. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VehicleCollection"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      404: components["responses"]["NotFound"];
+      503: components["responses"]["SourceUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getStaticManifest: {
+    parameters: {
+      query?: never;
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A static feed manifest suitable for conditional mobile synchronization. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          "X-Static-Feed-Version": components["headers"]["StaticFeedVersion"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StaticManifestResponse"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listAlerts: {
+    parameters: {
+      query?: {
+        routes?: string;
+        stops?: string;
+        /** @description Comma-separated modes. */
+        modes?: components["parameters"]["Modes"];
+        effect?: components["schemas"]["AlertEffect"];
+        active?: boolean;
+        updatedSince?: components["schemas"]["Timestamp"];
+        limit?: components["parameters"]["Limit"];
+        /** @description Opaque cursor returned by a prior response. */
+        cursor?: components["parameters"]["Cursor"];
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A page of alerts, preserving source wording where it is available. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AlertCollection"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      400: components["responses"]["ValidationError"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getAlert: {
+    parameters: {
+      query?: never;
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["AlertId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description An alert with source wording, affected entities, active periods, and freshness. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AlertDetailResponse"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      404: components["responses"]["NotFound"];
       default: components["responses"]["ErrorResponse"];
     };
   };
@@ -836,41 +1343,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /**
-           * @example {
-           *       "value": {
-           *         "query": "2901",
-           *         "vehicles": [
-           *           {
-           *             "id": "trimet:vehicle:2901",
-           *             "sourceVehicleId": "2901",
-           *             "mode": "bus",
-           *             "coordinate": [
-           *               -122.67,
-           *               45.52
-           *             ],
-           *             "inService": true,
-           *             "freshness": {
-           *               "source": "trimet-gtfsrt-vehicle-positions",
-           *               "fetchedAt": "2026-07-22T16:30:02Z",
-           *               "processedAt": "2026-07-22T16:30:02Z",
-           *               "status": "fresh",
-           *               "ageSeconds": 7,
-           *               "isRealtime": true
-           *             }
-           *           }
-           *         ],
-           *         "freshness": {
-           *           "source": "trimet-gtfsrt-vehicle-positions",
-           *           "fetchedAt": "2026-07-22T16:30:02Z",
-           *           "processedAt": "2026-07-22T16:30:02Z",
-           *           "status": "fresh",
-           *           "ageSeconds": 7,
-           *           "isRealtime": true
-           *         }
-           *       }
-           *     }
-           */
           "application/json": components["schemas"]["VehicleSearchResponse"];
         };
       };
@@ -899,31 +1371,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          /**
-           * @example {
-           *       "value": {
-           *         "vehicle": {
-           *           "id": "trimet:vehicle:2901",
-           *           "sourceVehicleId": "2901",
-           *           "mode": "bus",
-           *           "routeId": "trimet:route:20",
-           *           "coordinate": [
-           *             -122.67,
-           *             45.52
-           *           ],
-           *           "inService": true,
-           *           "freshness": {
-           *             "source": "trimet-gtfsrt-vehicle-positions",
-           *             "fetchedAt": "2026-07-22T16:30:02Z",
-           *             "processedAt": "2026-07-22T16:30:02Z",
-           *             "status": "aging",
-           *             "ageSeconds": 35,
-           *             "isRealtime": true
-           *           }
-           *         }
-           *       }
-           *     }
-           */
           "application/json": components["schemas"]["VehicleDetailResponse"];
         };
       };

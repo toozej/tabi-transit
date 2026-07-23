@@ -1,0 +1,35 @@
+{
+  "stopId": "trimet:stop:8334",
+  "arrivals": [
+    {
+      "id": "trimet:arrival:8334:20:20260722T164500Z",
+      "stopId": "trimet:stop:8334",
+      "routeId": "trimet:route:20",
+      "directionId": 1,
+      "headsign": "Gresham",
+      "scheduledAt": "2026-07-22T16:45:00Z",
+      "estimatedAt": "2026-07-22T16:47:00Z",
+      "status": "estimated",
+      "vehicleId": "trimet:vehicle:2901",
+      "tripId": "trimet:trip:20-1",
+      "stopSequence": 12,
+      "alertIds": [],
+      "freshness": {
+        "source": "trimet-web-services",
+        "fetchedAt": "2026-07-22T16:30:02Z",
+        "processedAt": "2026-07-22T16:30:02Z",
+        "status": "aging",
+        "ageSeconds": 35,
+        "isRealtime": true
+      }
+    }
+  ],
+  "freshness": {
+    "source": "trimet-web-services",
+    "fetchedAt": "2026-07-22T16:30:02Z",
+    "processedAt": "2026-07-22T16:30:02Z",
+    "status": "aging",
+    "ageSeconds": 35,
+    "isRealtime": true
+  }
+}
