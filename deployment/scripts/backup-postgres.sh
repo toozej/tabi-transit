@@ -4,7 +4,8 @@ umask 077
 
 deployment_root=${TABI_DEPLOYMENT_ROOT:-/opt/tabi}
 cd "$deployment_root"
-exec 9>/run/lock/tabi-postgres-backup.lock
+lock_dir=${TABI_LOCK_DIR:-/run/lock}
+exec 9>"$lock_dir/tabi-postgres-backup.lock"
 flock -n 9 || exit 0
 
 backup_dir=${TABI_BACKUP_DIR:-/var/lib/tabi/backups}/postgres
@@ -14,6 +15,7 @@ temporary_dump="$backup_dir/tabi-$timestamp.dump.tmp"
 final_dump="$backup_dir/tabi-$timestamp.dump"
 compose=(docker compose --env-file .env --env-file release.env -f compose.yaml -f compose.production.yaml)
 
+# shellcheck disable=SC2016 # Variables expand inside the container shell, not this host shell.
 "${compose[@]}" exec -T postgres sh -c \
   'pg_dump --format=custom --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$temporary_dump"
 test -s "$temporary_dump"

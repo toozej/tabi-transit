@@ -1,28 +1,24 @@
 name: ${COMPOSE_PROJECT_NAME:-tabi}
 
+x-backend-environment: &backend-environment
+  APP_ENV: ${APP_ENV:-production}
+  HTTP_LISTEN_ADDR: ${HTTP_LISTEN_ADDR:-:8080}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ${POSTGRES_DB:-tabi}
+  DATABASE_USER: ${POSTGRES_USER:-tabi}
+  DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
+  FEED_ARCHIVE_DIR: /var/lib/tabi/feed-archive
+  STATIC_ARTIFACT_DIR: /var/lib/tabi/static-artifacts
+
 x-backend-common: &backend-common
   image: ${TABI_BACKEND_IMAGE:?set an immutable TABI_BACKEND_IMAGE in release.env}
   restart: unless-stopped
-  environment:
-    APP_ENV: ${APP_ENV:-production}
-    HTTP_LISTEN_ADDR: ${HTTP_LISTEN_ADDR:-:8080}
-    LOG_FORMAT: ${LOG_FORMAT:-json}
-    LOG_LEVEL: ${LOG_LEVEL:-info}
-    DATABASE_HOST: postgres
-    DATABASE_PORT: "5432"
-    DATABASE_NAME: ${POSTGRES_DB:-tabi}
-    DATABASE_USER: ${POSTGRES_USER:-tabi}
-    DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
-    TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
-    MAPBOX_SERVER_TOKEN_FILE: /run/secrets/mapbox_server_token
-    INSTALLATION_AUTH_KEY_FILE: /run/secrets/installation_auth_key
-    FEED_ARCHIVE_DIR: /var/lib/tabi/feed-archive
-    STATIC_ARTIFACT_DIR: /var/lib/tabi/static-artifacts
+  environment: *backend-environment
   secrets:
     - postgres_password
-    - trimet_app_id
-    - mapbox_server_token
-    - installation_auth_key
   depends_on:
     postgres:
       condition: service_healthy
@@ -55,6 +51,12 @@ services:
   api:
     <<: *backend-common
     command: ["/app/transit-api"]
+    environment:
+      <<: *backend-environment
+      MAPBOX_SERVER_TOKEN_FILE: /run/secrets/mapbox_server_token
+    secrets:
+      - postgres_password
+      - mapbox_server_token
     expose: ["8080"]
     networks: [frontend, backend, egress]
     healthcheck:
@@ -68,6 +70,12 @@ services:
   realtime-poller:
     <<: *backend-common
     command: ["/app/realtime-poller"]
+    environment:
+      <<: *backend-environment
+      TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
+    secrets:
+      - postgres_password
+      - trimet_app_id
     networks: [backend, egress]
     volumes:
       - ${TABI_FEED_ARCHIVE_DIR:-/var/lib/tabi/feed-archive}:/var/lib/tabi/feed-archive
@@ -76,6 +84,12 @@ services:
     <<: *backend-common
     profiles: [notifications]
     command: ["/app/notification-worker"]
+    environment:
+      <<: *backend-environment
+      INSTALLATION_AUTH_KEY_FILE: /run/secrets/installation_auth_key
+    secrets:
+      - postgres_password
+      - installation_auth_key
     networks: [backend, egress]
 
   postgres:
@@ -108,6 +122,12 @@ services:
     profiles: [jobs]
     restart: "no"
     command: ["/app/gtfs-importer"]
+    environment:
+      <<: *backend-environment
+      TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
+    secrets:
+      - postgres_password
+      - trimet_app_id
     networks: [backend, egress]
     volumes:
       - ${TABI_FEED_ARCHIVE_DIR:-/var/lib/tabi/feed-archive}:/var/lib/tabi/feed-archive

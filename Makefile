@@ -52,9 +52,11 @@ generate:
 	@test -f api/openapi.yaml || { echo 'OpenAPI source missing: api/openapi.yaml (WP-02)'; exit 1; }
 	@test -d packages/api-client || { echo 'API client package missing: packages/api-client (WP-02)'; exit 1; }
 	@corepack pnpm --filter @tabi/api-client generate
+	@test -f db/sqlc.yaml || { echo 'sqlc configuration missing: db/sqlc.yaml (WP-03)'; exit 1; }
+	@go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate -f db/sqlc.yaml
 
 generate-check: generate
-	@git diff --exit-code -- api packages/api-client
+	@git diff --exit-code -- api packages/api-client db internal/persistence/sqlcgen
 
 db-up:
 	@test -f deployment/compose.yaml || { echo 'Compose topology missing: deployment/compose.yaml (WP-13)'; exit 1; }

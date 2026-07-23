@@ -9,11 +9,29 @@ fi
 
 deployment_root=${TABI_DEPLOYMENT_ROOT:-/opt/tabi}
 cd "$deployment_root"
-exec 9>/run/lock/tabi-deploy.lock
+lock_dir=${TABI_LOCK_DIR:-/run/lock}
+exec 9>"$lock_dir/tabi-deploy.lock"
 flock -n 9 || { echo "another deployment is running" >&2; exit 1; }
 
 candidate_release=$(realpath -- "$1")
 test -s "$candidate_release"
+
+# A release file is data, not a shell program. Require every runtime image to be
+# an immutable SHA-256 reference before Compose is allowed to interpolate it.
+require_immutable_image() {
+  local key=$1 value count
+  count=$(grep -Ec "^${key}=" "$candidate_release" || true)
+  [[ $count -eq 1 ]] || { echo "release file must contain exactly one $key" >&2; exit 2; }
+  value=$(sed -n "s/^${key}=//p" "$candidate_release")
+  [[ $value =~ ^[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}$ ]] || {
+    echo "$key must be an immutable lowercase SHA-256 image reference" >&2
+    exit 2
+  }
+}
+require_immutable_image TABI_BACKEND_IMAGE
+require_immutable_image POSTGIS_IMAGE
+require_immutable_image CADDY_IMAGE
+
 candidate=(docker compose --env-file .env --env-file "$candidate_release" -f compose.yaml -f compose.production.yaml)
 "${candidate[@]}" config --quiet
 

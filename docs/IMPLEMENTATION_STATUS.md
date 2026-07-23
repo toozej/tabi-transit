@@ -24,11 +24,11 @@ WP-13 infrastructure is independently gated by the host ADR.
 
 ## Work packages
 
-| State                    | Work packages                                                                                          | Notes                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Completed                | WP-00 Architecture, WP-01 Repository bootstrap, WP-02 API contract, WP-08 mobile spike, data/PostGIS spike, Compose spike | Integrated; available checks executed. |
-| Next unblocked           | WP-03 database foundation, WP-13 deployment implementation, WP-16/WP-17 review scaffolding | Begin after the Phase 0 commit; WP-04/WP-05 follow WP-03. |
-| Pending                  | WP-04 through WP-18, except the next-unblocked items above | Start only when their stated dependencies and Phase gates are met. |
+| State                    | Work packages                                                                                                                     | Notes                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Completed                | WP-00–03, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | WP-03 migrations/persistence and Phase 1 deployment/quality foundations are integrated. |
+| Next unblocked           | WP-04 GTFS importer | Static import can now target the production feed-version persistence foundation. |
+| Pending                  | WP-05 through WP-18, except the next-unblocked item above | Start only when their stated dependencies and Phase gates are met. |
 | Blocked / evidence-gated | WP-06 real TriMet access, optional sources, production-host deployment, physical RNMapbox proof, mobile RNTL/Vitest harness proof | Implement interfaces and fixtures without credentials; do not scrape. |
 
 ## Decisions awaiting evidence
@@ -44,11 +44,12 @@ WP-13 infrastructure is independently gated by the host ADR.
 ## Phase 0 validation evidence
 
 - Passed: `make format-check`, `make lint`, `make typecheck`, `make test`, `make test-race`, `make build`, `make doctor`, OpenAPI structural validation/generation/drift checks, Compose topology validation, Go GTFS/GTFS-RT/PostGIS spike tests, and shell syntax checks.
-- Passed: `corepack pnpm --dir apps/mobile typecheck` and Expo public-config resolution with a feature-disabled empty public Mapbox token.
+- Passed: `corepack pnpm --dir apps/mobile typecheck`. Expo printed the expected public config with a feature-disabled empty public Mapbox token, but its command exited when this environment denied creation of `$HOME/.expo`; rerun it in a writable developer/CI home.
 - Passed: an isolated real PostGIS geography query returned nearest bus and light-rail rows with `limitPerMode=1`; GTFS service time `25:15:30` remained `90930` seconds.
 - Not passed / open: mobile RNTL/Vitest execution fails during React Native dependency transformation; native map, SQLite, Maestro, iOS, and Android device gates have not run. Caddy binary validation and systemd verification also require a suitable host environment.
 - OpenAPI lint completes with warnings about component-example reference shape; structural validation and generated-client drift pass. Resolve those warnings before using examples as formal response-conformance fixtures.
+- Passed in the approved network environment: pinned sqlc v1.30.0 generation and `go test ./...`; ordinary sandbox `make generate` cannot reach `proxy.golang.org` and is an environment network gate, not a generated-code drift failure.
 
 ## Next integration milestone
 
-Commit the coherent Phase 0 foundation, then begin WP-03 production PostgreSQL/PostGIS migrations and persistence with WP-13 deployment implementation in parallel. WP-04 GTFS importer and WP-05 realtime poller remain gated on WP-03.
+Integrate and validate WP-04 GTFS importer. WP-05 realtime poller starts after WP-04 provides the required static identifier-mapping contract.

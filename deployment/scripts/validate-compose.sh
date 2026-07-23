@@ -18,22 +18,35 @@ POSTGRES_USER=tabi
 TABI_SECRETS_DIR=$temporary_dir
 TABI_FEED_ARCHIVE_DIR=/tmp/tabi-validation/feed-archive
 TABI_STATIC_ARTIFACT_DIR=/tmp/tabi-validation/static-artifacts
-TABI_BACKEND_IMAGE=ghcr.io/example/tabi-backend@sha256:REPLACE_WITH_A_VERIFIED_DIGEST
-POSTGIS_IMAGE=postgis/postgis@sha256:REPLACE_WITH_A_VERIFIED_DIGEST
-CADDY_IMAGE=caddy@sha256:REPLACE_WITH_A_VERIFIED_DIGEST
+TABI_BACKEND_IMAGE=ghcr.io/example/tabi-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+POSTGIS_IMAGE=postgis/postgis@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+CADDY_IMAGE=caddy@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 EOF
 
 rendered_config="$temporary_dir/compose.json"
 docker compose --env-file "$temporary_dir/env" \
   -f "$deployment_dir/compose.yaml" \
-  -f "$deployment_dir/compose.production.yaml" config --quiet
+  -f "$deployment_dir/compose.production.yaml" \
+  --profile jobs --profile notifications config --quiet
 docker compose --env-file "$temporary_dir/env" \
   -f "$deployment_dir/compose.yaml" \
-  -f "$deployment_dir/compose.production.yaml" config --format json > "$rendered_config"
+  -f "$deployment_dir/compose.production.yaml" \
+  --profile jobs --profile notifications config --format json > "$rendered_config"
 
 # Caddy must be the only service publishing a host port. PostgreSQL stays private.
 jq -e '
   (.services.postgres.ports // [] | length == 0) and
   ([.services | to_entries[] | select(.value.ports? and .key != "caddy")] | length == 0) and
-  (.networks.backend.internal == true)
+  (.networks.backend.internal == true) and
+  (.services.api.networks | has("frontend")) and
+  (.services.postgres.networks | keys == ["backend"]) and
+  ([.services | to_entries[] | select(.value.networks | has("frontend")) | .key] | sort == ["api", "caddy"])
+' "$rendered_config" >/dev/null
+
+# Least privilege: provider/installation secrets are mounted only where needed.
+jq -e '
+  (.services.api.secrets | map(.source) | sort == ["mapbox_server_token", "postgres_password"]) and
+  (.services."realtime-poller".secrets | map(.source) | sort == ["postgres_password", "trimet_app_id"]) and
+  (.services."notification-worker".secrets | map(.source) | sort == ["installation_auth_key", "postgres_password"]) and
+  (.services.migrate.secrets | map(.source) == ["postgres_password"])
 ' "$rendered_config" >/dev/null

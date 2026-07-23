@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 umask 077
 
-exec 9>/run/lock/tabi-restic-check.lock
+lock_dir=${TABI_LOCK_DIR:-/run/lock}
+exec 9>"$lock_dir/tabi-restic-check.lock"
 flock -n 9 || exit 0
 
 test -r /etc/tabi/secrets/restic_environment
