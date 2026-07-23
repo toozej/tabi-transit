@@ -10,4 +10,5 @@ if [ ! -f "$out" ]; then
 fi
 cd "$root/.."
 corepack pnpm exec openapi-typescript "$root/openapi.yaml" -o "$tmp"
+corepack pnpm exec prettier --parser typescript --write "$tmp"
 diff -u "$out" "$tmp"

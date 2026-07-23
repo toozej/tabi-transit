@@ -1,0 +1,17 @@
+# Requires an installed iOS/Android Expo development build configured with the
+# default fixture API mode. This flow deliberately makes no provider request.
+appId: app.tabi.transit
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Vehicles"
+- assertVisible: "Live; 7 seconds old; source fixture-normalized-vehicle-positions"
+- tapOn:
+    text: "Search exact vehicle ID"
+- inputText: "2901"
+- assertVisible: "Vehicle 2901"
+- tapOn:
+    text: "Select search result 2901"
+- assertVisible: "Selected vehicle details"
+- assertVisible: "Source: fixture-normalized-vehicle-positions"
+- assertVisible: "Route: fixture:route:20"
