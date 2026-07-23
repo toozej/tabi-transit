@@ -28,8 +28,9 @@ WP-13 infrastructure is independently gated by the host ADR.
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Completed                | WP-00–03, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | WP-03 migrations/persistence and Phase 1 deployment/quality foundations are integrated. |
 | Completed                | WP-00–06, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | Static import and realtime vehicle snapshot foundations are fixture-proven; real sources remain disabled. |
-| Next unblocked           | WP-07 minimum public API | All contract, database, static-import, realtime-poller, and TriMet-adapter foundations are available. |
-| Pending                  | WP-09 through WP-18 | Start only when their stated dependencies and Phase gates are met. |
+| Completed                | WP-00–08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | The public API is fixture-proven; catalog DB composition remains an explicit unavailable state until query adapters land. |
+| Next unblocked           | WP-09 mobile first vertical slice | Consume `/v1/config` and normalized vehicle snapshot/search/detail endpoints through fixture mode first. |
+| Pending                  | WP-10 through WP-18 | Start only when their stated dependencies and Phase gates are met. |
 | Blocked / evidence-gated | WP-06 real TriMet access, optional sources, production-host deployment, physical RNMapbox proof, mobile RNTL/Vitest harness proof | Implement interfaces and fixtures without credentials; do not scrape. |
 
 ## Decisions awaiting evidence
