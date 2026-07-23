@@ -15,3 +15,10 @@ client configuration.
 
 The source-facing DTOs are private. New provider fields/endpoints require a
 sanitized deterministic fixture and mapper test before feature enablement.
+
+Planning is separately gated by `TRIMET_PLANNER_ENABLED=true`; it accepts only
+normalized place references and bounded mode, transfer, walking, and
+accessibility preferences. The adapter returns source-neutral itinerary/leg
+summaries and freshness, never raw provider payloads or unreviewed geometry.
+No planner request is enabled until D-001 specifically records planner terms,
+rate limits, cache/retention, attribution, and supported constraint semantics.

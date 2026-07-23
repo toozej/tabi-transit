@@ -85,8 +85,18 @@ type planResponse struct {
 	} `json:"resultSet"`
 }
 type itineraryDTO struct {
-	DurationSeconds int `json:"durationSeconds"`
-	Transfers       int `json:"transfers"`
+	DurationSeconds int      `json:"durationSeconds"`
+	Transfers       int      `json:"transfers"`
+	Legs            []legDTO `json:"legs"`
+}
+type legDTO struct {
+	Mode           string `json:"mode"`
+	RouteID        string `json:"routeID"`
+	FromName       string `json:"fromName"`
+	ToName         string `json:"toName"`
+	Start          string `json:"startTime"`
+	End            string `json:"endTime"`
+	DistanceMeters *int   `json:"distanceMeters"`
 }
 
 func decodeResponse(body io.Reader, target any) error {
@@ -145,7 +155,14 @@ func mapBlock(v blockResponse) Block {
 func mapPlan(v planResponse) Plan {
 	output := Plan{ID: v.ResultSet.PlanID, Itineraries: make([]Itinerary, 0, len(v.ResultSet.Itineraries))}
 	for _, i := range v.ResultSet.Itineraries {
-		output.Itineraries = append(output.Itineraries, Itinerary{DurationSeconds: i.DurationSeconds, Transfers: i.Transfers})
+		itinerary := Itinerary{DurationSeconds: i.DurationSeconds, Transfers: i.Transfers, Legs: make([]ItineraryLeg, 0, len(i.Legs))}
+		for _, leg := range i.Legs {
+			itinerary.Legs = append(itinerary.Legs, ItineraryLeg{
+				Mode: Mode(leg.Mode), RouteID: leg.RouteID, FromName: leg.FromName, ToName: leg.ToName,
+				StartAt: parseProviderTime(leg.Start), EndAt: parseProviderTime(leg.End), DistanceMeters: leg.DistanceMeters,
+			})
+		}
+		output.Itineraries = append(output.Itineraries, itinerary)
 	}
 	return output
 }

@@ -197,6 +197,69 @@ func TestPlannerFeatureGate(t *testing.T) {
 	}
 }
 
+func TestPlannerMapsSanitizedFixtureAndConstraints(t *testing.T) {
+	t.Parallel()
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "..", "tests", "fixtures", "upstream", "trimet", "trip_planner.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxTransfers, maxWalk := 1, 1200
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/ws/v2/tripplanner" {
+			t.Errorf("path: %s", request.URL.Path)
+		}
+		query := request.URL.Query()
+		if query.Get("fromPlace") != "tabi:stop:8334" || query.Get("toPlace") != "tabi:stop:1000" {
+			t.Errorf("unexpected places: %q %q", query.Get("fromPlace"), query.Get("toPlace"))
+		}
+		if query.Get("modes") != "bus,walk" || query.Get("maxTransfers") != "1" || query.Get("maxWalkMeters") != "1200" || query.Get("accessible") != "true" || query.Get("arriveBy") != "true" {
+			t.Errorf("constraints not mapped: %v", query)
+		}
+		_, _ = w.Write(fixture)
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	client, err := NewClient(Config{Enabled: true, PlannerEnabled: true, AppID: "fixture-only", BaseURL: server.URL, AllowedHosts: []string{u.Hostname()}, Timeout: time.Second}, server.Client(), fixedClock{now: time.Date(2026, 7, 23, 16, 32, 1, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, freshness, err := client.Plan(context.Background(), PlanRequest{
+		Origin: "tabi:stop:8334", Destination: "tabi:stop:1000", ArriveBy: true,
+		Preferences: PlanPreferences{Modes: []Mode{ModeBus, ModeWalk}, MaxTransfers: &maxTransfers, MaxWalkMeters: &maxWalk, RequireAccessibility: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ID != "fixture-plan-20" || len(plan.Itineraries) != 1 || len(plan.Itineraries[0].Legs) != 2 || plan.Itineraries[0].Legs[1].Mode != ModeBus || plan.Itineraries[0].Legs[1].DistanceMeters == nil {
+		t.Fatalf("unexpected plan: %#v", plan)
+	}
+	if freshness.Source != SourceID || !freshness.IsRealtime {
+		t.Fatalf("unexpected freshness: %#v", freshness)
+	}
+}
+
+func TestPlannerRejectsUnsafeConstraints(t *testing.T) {
+	t.Parallel()
+	client, err := NewClient(Config{Enabled: true, PlannerEnabled: true, AppID: "fixture-only", BaseURL: "https://ws.trimet.org", AllowedHosts: []string{"ws.trimet.org"}, Timeout: time.Second}, nil, fixedClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	negativeWalk := -1
+	_, _, err = client.Plan(context.Background(), PlanRequest{Origin: "a", Destination: "b", Preferences: PlanPreferences{Modes: []Mode{Mode("scooter")}, MaxWalkMeters: &negativeWalk}})
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestConfigRejectsBaseURLCredentialsOrQuery(t *testing.T) {
+	t.Parallel()
+	for _, baseURL := range []string{"https://user:pass@ws.trimet.org", "https://ws.trimet.org?unexpected=true"} {
+		if err := (Config{Enabled: true, AppID: "fixture-only", BaseURL: baseURL, AllowedHosts: []string{"ws.trimet.org"}, Timeout: time.Second}).Validate(); err == nil {
+			t.Fatalf("expected invalid base URL %q", baseURL)
+		}
+	}
+}
+
 func errString(err error) string {
 	if err == nil {
 		return ""

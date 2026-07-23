@@ -1,0 +1,30 @@
+{
+  "resultSet": {
+    "planID": "fixture-plan-20",
+    "itineraries": [
+      {
+        "durationSeconds": 1920,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "walk",
+            "fromName": "Fixture origin",
+            "toName": "Fixture stop",
+            "startTime": "2026-07-23T16:00:00Z",
+            "endTime": "2026-07-23T16:05:00Z",
+            "distanceMeters": 320
+          },
+          {
+            "mode": "bus",
+            "routeID": "20",
+            "fromName": "Fixture stop",
+            "toName": "Fixture destination",
+            "startTime": "2026-07-23T16:06:00Z",
+            "endTime": "2026-07-23T16:32:00Z",
+            "distanceMeters": 8410
+          }
+        ]
+      }
+    ]
+  }
+}

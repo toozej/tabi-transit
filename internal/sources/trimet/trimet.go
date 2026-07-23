@@ -118,7 +118,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("%w: enabled source requires a non-empty AppID", ErrInvalidConfig)
 	}
 	u, err := url.Parse(c.BaseURL)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || !hostAllowed(u.Hostname(), c.AllowedHosts) {
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !hostAllowed(u.Hostname(), c.AllowedHosts) {
 		return fmt.Errorf("%w: base URL must be HTTPS and match the configured allowlist", ErrInvalidConfig)
 	}
 	return nil
@@ -199,9 +199,34 @@ type Block struct {
 	TripIDs []string
 }
 type PlanRequest struct {
+	// Origin and Destination are normalized application references. They are
+	// intentionally opaque to this source package so callers can choose a
+	// provider-approved stop/place/coordinate representation without exposing a
+	// TriMet response outside the adapter.
 	Origin, Destination string
 	DepartAt            *time.Time
+	ArriveBy            bool
+	Preferences         PlanPreferences
 }
+
+// PlanPreferences expresses only rider-facing constraints. Provider-specific
+// field names remain private to the request mapper below.
+type PlanPreferences struct {
+	Modes                []Mode
+	MaxTransfers         *int
+	MaxWalkMeters        *int
+	RequireAccessibility bool
+}
+
+type Mode string
+
+const (
+	ModeBus  Mode = "bus"
+	ModeRail Mode = "rail"
+	ModeTram Mode = "tram"
+	ModeWalk Mode = "walk"
+)
+
 type Plan struct {
 	ID          string
 	Itineraries []Itinerary
@@ -209,6 +234,16 @@ type Plan struct {
 type Itinerary struct {
 	DurationSeconds int
 	Transfers       int
+	Legs            []ItineraryLeg
+}
+
+// ItineraryLeg is a source-neutral summary. It deliberately excludes raw
+// provider geometry and unreviewed provider metadata.
+type ItineraryLeg struct {
+	Mode                      Mode
+	RouteID, FromName, ToName string
+	StartAt, EndAt            *time.Time
+	DistanceMeters            *int
 }
 
 func (c *Client) Arrivals(ctx context.Context, request ArrivalsRequest) ([]Arrival, Freshness, error) {
@@ -254,15 +289,31 @@ func (c *Client) Plan(ctx context.Context, request PlanRequest) (Plan, Freshness
 	if !c.config.PlannerEnabled {
 		return Plan{}, Freshness{}, &Error{Kind: ErrorDisabled, Err: ErrDisabled}
 	}
-	if err := validateID(request.Origin); err != nil {
-		return Plan{}, Freshness{}, err
-	}
-	if err := validateID(request.Destination); err != nil {
+	if err := validatePlanRequest(request); err != nil {
 		return Plan{}, Freshness{}, err
 	}
 	values := url.Values{"fromPlace": {request.Origin}, "toPlace": {request.Destination}}
 	if request.DepartAt != nil {
 		values.Set("date", request.DepartAt.UTC().Format(time.RFC3339))
+	}
+	if request.ArriveBy {
+		values.Set("arriveBy", "true")
+	}
+	if len(request.Preferences.Modes) > 0 {
+		modes := make([]string, 0, len(request.Preferences.Modes))
+		for _, mode := range request.Preferences.Modes {
+			modes = append(modes, string(mode))
+		}
+		values.Set("modes", strings.Join(modes, ","))
+	}
+	if request.Preferences.MaxTransfers != nil {
+		values.Set("maxTransfers", strconv.Itoa(*request.Preferences.MaxTransfers))
+	}
+	if request.Preferences.MaxWalkMeters != nil {
+		values.Set("maxWalkMeters", strconv.Itoa(*request.Preferences.MaxWalkMeters))
+	}
+	if request.Preferences.RequireAccessibility {
+		values.Set("accessible", "true")
 	}
 	var response planResponse
 	f, e := c.get(ctx, "/ws/v2/tripplanner", values, &response)
@@ -300,7 +351,9 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, target 
 		return Freshness{}, &Error{Kind: ErrorUnavailable, StatusCode: response.StatusCode}
 	}
 	if err := decodeResponse(response.Body, target); err != nil {
-		return Freshness{}, &Error{Kind: ErrorMalformed, Err: err}
+		// Do not retain a decoder error, as it can reflect provider response
+		// content. Application callers only receive a safe classification.
+		return Freshness{}, &Error{Kind: ErrorMalformed, Err: errors.New("response decode failed")}
 	}
 	now := c.clock.Now().UTC()
 	return Freshness{Source: SourceID, FetchedAt: now, ProcessedAt: now, IsRealtime: true}, nil
@@ -312,6 +365,37 @@ func invalidRequest(message string) error {
 func validateID(id string) error {
 	if id == "" || len(id) > 512 || strings.ContainsAny(id, "\r\n\t") {
 		return invalidRequest("identifier is invalid")
+	}
+	return nil
+}
+
+func validatePlanRequest(request PlanRequest) error {
+	if err := validateID(request.Origin); err != nil {
+		return err
+	}
+	if err := validateID(request.Destination); err != nil {
+		return err
+	}
+	if request.DepartAt != nil && request.DepartAt.IsZero() {
+		return invalidRequest("departure time is invalid")
+	}
+	seenModes := make(map[Mode]struct{}, len(request.Preferences.Modes))
+	for _, mode := range request.Preferences.Modes {
+		switch mode {
+		case ModeBus, ModeRail, ModeTram, ModeWalk:
+		default:
+			return invalidRequest("mode is invalid")
+		}
+		if _, exists := seenModes[mode]; exists {
+			return invalidRequest("modes must be unique")
+		}
+		seenModes[mode] = struct{}{}
+	}
+	if value := request.Preferences.MaxTransfers; value != nil && (*value < 0 || *value > 6) {
+		return invalidRequest("maximum transfers must be between 0 and 6")
+	}
+	if value := request.Preferences.MaxWalkMeters; value != nil && (*value < 0 || *value > 50000) {
+		return invalidRequest("maximum walking distance must be between 0 and 50000 metres")
 	}
 	return nil
 }
