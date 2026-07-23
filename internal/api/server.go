@@ -52,6 +52,8 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 		r.Get("/routes/{id}/shape", s.routeShape)
 		r.Get("/routes/{id}/stops", s.routeStops)
 		r.Get("/routes/{id}/vehicles", s.routeVehicles)
+		r.Get("/alerts", s.alerts)
+		r.Get("/alerts/{id}", s.alert)
 		r.Get("/vehicles", s.vehicles)
 		r.Get("/vehicles/search", s.vehicleSearch)
 		r.Get("/vehicles/{id}", s.vehicle)
@@ -120,7 +122,8 @@ func (s *Server) stop(w http.ResponseWriter, r *http.Request) {
 	s.etag(w, r, map[string]any{"stop": stopJSON(detail.Stop), "staticFeedVersion": detail.StaticFeedVersion, "freshness": staticFreshness(detail.Freshness.ActivatedAt)})
 }
 func (s *Server) stopArrivals(w http.ResponseWriter, r *http.Request) {
-	if _, ok := publicIDParam(r, w, "stop"); !ok {
+	id, ok := publicIDParam(r, w, "stop")
+	if !ok {
 		return
 	}
 	if _, ok := boundedInt(r, w, "minutes", 90, 1, 240); !ok {
@@ -136,10 +139,32 @@ func (s *Server) stopArrivals(w http.ResponseWriter, r *http.Request) {
 	if _, ok := optionalBool(r, w, "includeScheduled"); !ok {
 		return
 	}
-	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Arrivals are not available until normalized schedule and trip-update data are loaded.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-arrivals"})
+	routes, err := qualifiedIDs(r.URL.Query().Get("routes"), "route")
+	if err != nil {
+		s.validation(w, r, "routes", "invalid")
+		return
+	}
+	direction, _ := optionalDirection(r, w)
+	minutes, _ := boundedInt(r, w, "minutes", 90, 1, 240)
+	include, _ := optionalBool(r, w, "includeScheduled")
+	includeScheduled := true
+	if include != nil {
+		includeScheduled = *include
+	}
+	arrivals, err := s.app.StopArrivals(r.Context(), persistence.ArrivalFilter{StopID: id, Minutes: minutes, RouteIDs: routes, DirectionID: direction, IncludeScheduled: includeScheduled, Now: time.Now().UTC()})
+	if err != nil {
+		s.arrivalsUnavailable(w, r)
+		return
+	}
+	items := make([]map[string]any, 0, len(arrivals))
+	for _, a := range arrivals {
+		items = append(items, arrivalJSON(a))
+	}
+	s.etag(w, r, map[string]any{"stopId": id, "arrivals": items, "freshness": arrivalsFreshness(arrivals)})
 }
 func (s *Server) stopSchedule(w http.ResponseWriter, r *http.Request) {
-	if _, ok := publicIDParam(r, w, "stop"); !ok {
+	id, ok := publicIDParam(r, w, "stop")
+	if !ok {
 		return
 	}
 	if !validServiceDate(r.URL.Query().Get("serviceDate")) {
@@ -153,10 +178,95 @@ func (s *Server) stopSchedule(w http.ResponseWriter, r *http.Request) {
 	if _, ok := optionalDirection(r, w); !ok {
 		return
 	}
-	if _, ok := parseCommon(r, w, true); !ok {
+	q, ok := parseCommon(r, w, true)
+	if !ok {
 		return
 	}
-	s.staticUnavailable(w, r)
+	direction, _ := optionalDirection(r, w)
+	schedule, version, next, err := s.app.StopSchedule(r.Context(), persistence.ScheduleFilter{StopID: id, ServiceDate: r.URL.Query().Get("serviceDate"), RouteID: r.URL.Query().Get("routeId"), DirectionID: direction, Limit: q.limit, Cursor: r.URL.Query().Get("cursor")})
+	if err != nil {
+		s.staticUnavailable(w, r)
+		return
+	}
+	items := make([]map[string]any, 0, len(schedule))
+	for _, entry := range schedule {
+		items = append(items, scheduleJSON(entry))
+	}
+	body := map[string]any{"stopId": id, "serviceDate": r.URL.Query().Get("serviceDate"), "staticFeedVersion": version, "schedule": items}
+	if next != "" {
+		body["nextCursor"] = next
+	}
+	w.Header().Set("X-Static-Feed-Version", version)
+	s.etag(w, r, body)
+}
+func (s *Server) alerts(w http.ResponseWriter, r *http.Request) {
+	q, ok := parseCommon(r, w, true)
+	if !ok {
+		return
+	}
+	routes, err := qualifiedIDs(r.URL.Query().Get("routes"), "route")
+	if err != nil {
+		s.validation(w, r, "routes", "invalid")
+		return
+	}
+	stops, err := qualifiedIDs(r.URL.Query().Get("stops"), "stop")
+	if err != nil {
+		s.validation(w, r, "stops", "invalid")
+		return
+	}
+	effect := r.URL.Query().Get("effect")
+	if effect != "" && !validAlertEffect(effect) {
+		s.validation(w, r, "effect", "invalid")
+		return
+	}
+	active := true
+	if value, present := r.URL.Query()["active"]; present {
+		parsed, err := strconv.ParseBool(value[0])
+		if err != nil {
+			s.validation(w, r, "active", "invalid")
+			return
+		}
+		active = parsed
+	}
+	var updated *time.Time
+	if raw := r.URL.Query().Get("updatedSince"); raw != "" {
+		value, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			s.validation(w, r, "updatedSince", "invalid")
+			return
+		}
+		updated = &value
+	}
+	alerts, next, err := s.app.Alerts(r.Context(), persistence.AlertFilter{RouteIDs: routes, StopIDs: stops, Modes: q.modes, Effect: effect, Active: active, UpdatedSince: updated, Limit: q.limit, Cursor: r.URL.Query().Get("cursor"), Now: time.Now().UTC()})
+	if err != nil {
+		s.alertsUnavailable(w, r)
+		return
+	}
+	items := make([]map[string]any, 0, len(alerts))
+	for _, alert := range alerts {
+		items = append(items, alertJSON(alert))
+	}
+	body := map[string]any{"alerts": items, "freshness": alertsFreshness(alerts)}
+	if next != "" {
+		body["nextCursor"] = next
+	}
+	s.etag(w, r, body)
+}
+func (s *Server) alert(w http.ResponseWriter, r *http.Request) {
+	id, ok := publicIDParam(r, w, "alert")
+	if !ok {
+		return
+	}
+	item, err := s.app.Alert(r.Context(), id)
+	if errors.Is(err, persistence.ErrNotFound) {
+		s.error(w, r, http.StatusNotFound, "not_found", "Alert was not found.", nil)
+		return
+	}
+	if err != nil {
+		s.alertsUnavailable(w, r)
+		return
+	}
+	s.etag(w, r, map[string]any{"alert": alertJSON(item)})
 }
 func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	id, ok := publicIDParam(r, w, "route")
@@ -550,6 +660,101 @@ func staticFreshness(activated time.Time) map[string]any {
 func (s *Server) staticUnavailable(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Retry-After", "30")
 	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Normalized static transit data is temporarily unavailable.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-static-gtfs"})
+}
+func (s *Server) arrivalsUnavailable(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Retry-After", "30")
+	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Normalized arrivals are temporarily unavailable.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-arrivals"})
+}
+func (s *Server) alertsUnavailable(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Retry-After", "30")
+	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Normalized alerts are temporarily unavailable.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-alerts"})
+}
+func qualifiedIDs(raw, kind string) ([]string, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	values := strings.Split(raw, ",")
+	for _, value := range values {
+		if persistence.ValidatePublicID(value, kind) != nil {
+			return nil, persistence.ErrInvalidPublicID
+		}
+	}
+	return values, nil
+}
+func validAlertEffect(value string) bool {
+	for _, allowed := range []string{"no_service", "reduced_service", "significant_delays", "detour", "stop_moved", "modified_service", "other", "unknown"} {
+		if value == allowed {
+			return true
+		}
+	}
+	return false
+}
+func scheduleJSON(x persistence.ScheduleTime) map[string]any {
+	out := map[string]any{"tripId": x.TripID, "routeId": x.RouteID, "stopId": x.StopID, "serviceDate": x.ServiceDate, "serviceDaySeconds": x.ServiceDaySeconds}
+	if !x.DepartureAt.IsZero() {
+		out["departureAt"] = x.DepartureAt.UTC().Format(time.RFC3339)
+	}
+	if x.DirectionID != nil {
+		out["directionId"] = *x.DirectionID
+	}
+	if x.Headsign != "" {
+		out["headsign"] = x.Headsign
+	}
+	return out
+}
+func arrivalJSON(x persistence.Arrival) map[string]any {
+	out := map[string]any{"id": x.ID, "stopId": x.StopID, "routeId": x.RouteID, "status": x.Status, "scheduledAt": x.ScheduledAt.UTC().Format(time.RFC3339), "freshness": staticFreshness(x.Freshness.ActivatedAt)}
+	if x.DirectionID != nil {
+		out["directionId"] = *x.DirectionID
+	}
+	if x.Headsign != "" {
+		out["headsign"] = x.Headsign
+	}
+	if x.EstimatedAt != nil {
+		out["estimatedAt"] = x.EstimatedAt.UTC().Format(time.RFC3339)
+	}
+	if x.TripID != nil {
+		out["tripId"] = *x.TripID
+	}
+	if x.StopSequence != nil {
+		out["stopSequence"] = *x.StopSequence
+	}
+	return out
+}
+func alertJSON(x persistence.Alert) map[string]any {
+	periods := []map[string]any{{}}
+	if x.ActiveFrom != nil {
+		periods[0]["startAt"] = x.ActiveFrom.UTC().Format(time.RFC3339)
+	}
+	if x.ActiveUntil != nil {
+		periods[0]["endAt"] = x.ActiveUntil.UTC().Format(time.RFC3339)
+	}
+	out := map[string]any{"id": x.ID, "revision": x.Revision, "header": x.Header, "periods": periods, "source": x.Source, "freshness": map[string]any{"source": x.Source, "fetchedAt": x.FetchedAt.UTC().Format(time.RFC3339), "processedAt": x.ProcessedAt.UTC().Format(time.RFC3339), "status": "unknown", "ageSeconds": int(maxDuration(0, time.Since(x.FetchedAt)).Seconds()), "isRealtime": true}}
+	if x.Description != "" {
+		out["description"] = x.Description
+	}
+	if x.Cause != "" {
+		out["cause"] = x.Cause
+	}
+	if validAlertEffect(x.Effect) {
+		out["effect"] = x.Effect
+	}
+	if x.SourceURL != "" {
+		out["sourceUrl"] = x.SourceURL
+	}
+	return out
+}
+func arrivalsFreshness(items []persistence.Arrival) map[string]any {
+	if len(items) == 0 {
+		return map[string]any{"source": "normalized-arrivals", "fetchedAt": time.Now().UTC().Format(time.RFC3339), "processedAt": time.Now().UTC().Format(time.RFC3339), "status": "unknown", "ageSeconds": 0, "isRealtime": false}
+	}
+	return staticFreshness(items[0].Freshness.ActivatedAt)
+}
+func alertsFreshness(items []persistence.Alert) map[string]any {
+	if len(items) == 0 {
+		return map[string]any{"source": "normalized-alerts", "fetchedAt": time.Now().UTC().Format(time.RFC3339), "processedAt": time.Now().UTC().Format(time.RFC3339), "status": "unknown", "ageSeconds": 0, "isRealtime": true}
+	}
+	return alertJSON(items[0])["freshness"].(map[string]any)
 }
 func (s *Server) staticLookupError(w http.ResponseWriter, r *http.Request, err error, message string) {
 	if errors.Is(err, persistence.ErrNotFound) {

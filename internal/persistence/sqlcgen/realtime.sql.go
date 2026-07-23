@@ -11,6 +11,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getCurrentAlert = `-- name: GetCurrentAlert :one
+SELECT source_id, entity_id, cause, effect, COALESCE(header_text,'') AS header_text,
+       COALESCE(description_text,'') AS description_text, COALESCE(url,'') AS url,
+       active_from, active_until, fetched_at, processed_at
+FROM realtime.alerts_current
+WHERE source_id=$1 AND entity_id=$2
+`
+
+type GetCurrentAlertParams struct {
+	SourceID string `json:"source_id"`
+	EntityID string `json:"entity_id"`
+}
+
+type GetCurrentAlertRow struct {
+	SourceID        string             `json:"source_id"`
+	EntityID        string             `json:"entity_id"`
+	Cause           pgtype.Text        `json:"cause"`
+	Effect          pgtype.Text        `json:"effect"`
+	HeaderText      string             `json:"header_text"`
+	DescriptionText string             `json:"description_text"`
+	Url             string             `json:"url"`
+	ActiveFrom      pgtype.Timestamptz `json:"active_from"`
+	ActiveUntil     pgtype.Timestamptz `json:"active_until"`
+	FetchedAt       pgtype.Timestamptz `json:"fetched_at"`
+	ProcessedAt     pgtype.Timestamptz `json:"processed_at"`
+}
+
+func (q *Queries) GetCurrentAlert(ctx context.Context, arg GetCurrentAlertParams) (GetCurrentAlertRow, error) {
+	row := q.db.QueryRow(ctx, getCurrentAlert, arg.SourceID, arg.EntityID)
+	var i GetCurrentAlertRow
+	err := row.Scan(
+		&i.SourceID,
+		&i.EntityID,
+		&i.Cause,
+		&i.Effect,
+		&i.HeaderText,
+		&i.DescriptionText,
+		&i.Url,
+		&i.ActiveFrom,
+		&i.ActiveUntil,
+		&i.FetchedAt,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
 const hasReadyVehicleData = `-- name: HasReadyVehicleData :one
 SELECT EXISTS (
   SELECT 1
@@ -30,6 +76,81 @@ func (q *Queries) HasReadyVehicleData(ctx context.Context) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listCurrentAlerts = `-- name: ListCurrentAlerts :many
+SELECT source_id, entity_id, cause, effect, COALESCE(header_text,'') AS header_text,
+       COALESCE(description_text,'') AS description_text, COALESCE(url,'') AS url,
+       active_from, active_until, fetched_at, processed_at
+FROM realtime.alerts_current
+WHERE ($1::boolean = false OR (active_from IS NULL OR active_from <= $2) AND (active_until IS NULL OR active_until >= $2))
+  AND ($3::text='' OR effect=$3)
+  AND ($4::timestamptz IS NULL OR processed_at >= $4)
+  AND (concat(source_id, ':alert:', entity_id) > $5::text)
+ORDER BY processed_at DESC, source_id, entity_id
+LIMIT $6
+`
+
+type ListCurrentAlertsParams struct {
+	ActiveOnly   bool               `json:"active_only"`
+	NowAt        pgtype.Timestamptz `json:"now_at"`
+	Effect       string             `json:"effect"`
+	UpdatedSince pgtype.Timestamptz `json:"updated_since"`
+	Cursor       string             `json:"cursor"`
+	RowLimit     int32              `json:"row_limit"`
+}
+
+type ListCurrentAlertsRow struct {
+	SourceID        string             `json:"source_id"`
+	EntityID        string             `json:"entity_id"`
+	Cause           pgtype.Text        `json:"cause"`
+	Effect          pgtype.Text        `json:"effect"`
+	HeaderText      string             `json:"header_text"`
+	DescriptionText string             `json:"description_text"`
+	Url             string             `json:"url"`
+	ActiveFrom      pgtype.Timestamptz `json:"active_from"`
+	ActiveUntil     pgtype.Timestamptz `json:"active_until"`
+	FetchedAt       pgtype.Timestamptz `json:"fetched_at"`
+	ProcessedAt     pgtype.Timestamptz `json:"processed_at"`
+}
+
+func (q *Queries) ListCurrentAlerts(ctx context.Context, arg ListCurrentAlertsParams) ([]ListCurrentAlertsRow, error) {
+	rows, err := q.db.Query(ctx, listCurrentAlerts,
+		arg.ActiveOnly,
+		arg.NowAt,
+		arg.Effect,
+		arg.UpdatedSince,
+		arg.Cursor,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCurrentAlertsRow{}
+	for rows.Next() {
+		var i ListCurrentAlertsRow
+		if err := rows.Scan(
+			&i.SourceID,
+			&i.EntityID,
+			&i.Cause,
+			&i.Effect,
+			&i.HeaderText,
+			&i.DescriptionText,
+			&i.Url,
+			&i.ActiveFrom,
+			&i.ActiveUntil,
+			&i.FetchedAt,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCurrentVehicles = `-- name: ListCurrentVehicles :many
@@ -93,6 +214,87 @@ func (q *Queries) ListCurrentVehicles(ctx context.Context, sourceIds []string) (
 			&i.ProcessedAt,
 			&i.FreshnessStatus,
 			&i.SnapshotID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStopSchedule = `-- name: ListStopSchedule :many
+WITH active AS (
+  SELECT id, version_label FROM catalog.feed_versions WHERE status = 'active'
+), applicable AS (
+  SELECT s.feed_version_id, s.service_id
+  FROM transit.services s JOIN active f ON f.id = s.feed_version_id
+  LEFT JOIN transit.service_calendar_dates d ON d.feed_version_id=s.feed_version_id AND d.service_id=s.service_id AND d.service_date=$6::date
+  LEFT JOIN transit.service_calendars c ON c.feed_version_id=s.feed_version_id AND c.service_id=s.service_id
+  WHERE COALESCE(d.exception_type=1, (c.start_date <= $6::date AND c.end_date >= $6::date AND CASE EXTRACT(ISODOW FROM $6::date) WHEN 1 THEN c.monday WHEN 2 THEN c.tuesday WHEN 3 THEN c.wednesday WHEN 4 THEN c.thursday WHEN 5 THEN c.friday WHEN 6 THEN c.saturday ELSE c.sunday END))
+    AND COALESCE(d.exception_type, 0) <> 2
+)
+SELECT t.public_id AS trip_id, t.route_public_id AS route_id, st.stop_public_id AS stop_id, t.direction_id, COALESCE(t.headsign,'') AS headsign,
+       COALESCE(st.departure_seconds, st.arrival_seconds) AS service_day_seconds, f.version_label
+FROM transit.stop_times st
+JOIN transit.trips t ON t.feed_version_id=st.feed_version_id AND t.public_id=st.trip_public_id
+JOIN applicable a ON a.feed_version_id=t.feed_version_id AND a.service_id=t.service_id
+JOIN active f ON f.id=t.feed_version_id
+WHERE st.stop_public_id=$1
+  AND ($2::text='' OR t.route_public_id=$2)
+  AND ($3::smallint IS NULL OR t.direction_id=$3::smallint)
+  AND ($4::text='' OR concat(t.public_id, ':', st.stop_sequence) > $4)
+ORDER BY COALESCE(st.departure_seconds, st.arrival_seconds), t.public_id, st.stop_sequence
+LIMIT $5
+`
+
+type ListStopScheduleParams struct {
+	StopID      string      `json:"stop_id"`
+	RouteID     string      `json:"route_id"`
+	DirectionID pgtype.Int2 `json:"direction_id"`
+	Cursor      string      `json:"cursor"`
+	RowLimit    int32       `json:"row_limit"`
+	ServiceDate pgtype.Date `json:"service_date"`
+}
+
+type ListStopScheduleRow struct {
+	TripID            string      `json:"trip_id"`
+	RouteID           string      `json:"route_id"`
+	StopID            string      `json:"stop_id"`
+	DirectionID       pgtype.Int2 `json:"direction_id"`
+	Headsign          string      `json:"headsign"`
+	ServiceDaySeconds pgtype.Int4 `json:"service_day_seconds"`
+	VersionLabel      string      `json:"version_label"`
+}
+
+// Calendar exceptions take precedence over weekday service. Service-day seconds
+// are deliberately returned unchanged so after-midnight trips remain correct.
+func (q *Queries) ListStopSchedule(ctx context.Context, arg ListStopScheduleParams) ([]ListStopScheduleRow, error) {
+	rows, err := q.db.Query(ctx, listStopSchedule,
+		arg.StopID,
+		arg.RouteID,
+		arg.DirectionID,
+		arg.Cursor,
+		arg.RowLimit,
+		arg.ServiceDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStopScheduleRow{}
+	for rows.Next() {
+		var i ListStopScheduleRow
+		if err := rows.Scan(
+			&i.TripID,
+			&i.RouteID,
+			&i.StopID,
+			&i.DirectionID,
+			&i.Headsign,
+			&i.ServiceDaySeconds,
+			&i.VersionLabel,
 		); err != nil {
 			return nil, err
 		}

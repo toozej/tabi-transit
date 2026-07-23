@@ -12,6 +12,7 @@ type Querier interface {
 	GetActiveFeedVersion(ctx context.Context, sourceID string) (GetActiveFeedVersionRow, error)
 	GetCatalogRoute(ctx context.Context, publicID string) (GetCatalogRouteRow, error)
 	GetCatalogStop(ctx context.Context, publicID string) (GetCatalogStopRow, error)
+	GetCurrentAlert(ctx context.Context, arg GetCurrentAlertParams) (GetCurrentAlertRow, error)
 	GetSourceHealth(ctx context.Context, sourceID string) (GetSourceHealthRow, error)
 	// Readiness deliberately requires a valid snapshot and its corresponding
 	// successful source-health record. A database connection alone is not enough
@@ -21,12 +22,16 @@ type Querier interface {
 	// newest activation is the response version marker until the API exposes a
 	// multi-source static manifest.
 	LatestActiveFeedVersionLabel(ctx context.Context) (string, error)
+	ListCurrentAlerts(ctx context.Context, arg ListCurrentAlertsParams) ([]ListCurrentAlertsRow, error)
 	ListCurrentVehicles(ctx context.Context, sourceIds []string) ([]ListCurrentVehiclesRow, error)
 	ListNearbyStopsPerMode(ctx context.Context, arg ListNearbyStopsPerModeParams) ([]ListNearbyStopsPerModeRow, error)
 	ListRouteDirections(ctx context.Context, routePublicID string) ([]ListRouteDirectionsRow, error)
 	ListRouteShapes(ctx context.Context, arg ListRouteShapesParams) ([]ListRouteShapesRow, error)
 	ListRouteStops(ctx context.Context, arg ListRouteStopsParams) ([]ListRouteStopsRow, error)
 	ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListRoutesRow, error)
+	// Calendar exceptions take precedence over weekday service. Service-day seconds
+	// are deliberately returned unchanged so after-midnight trips remain correct.
+	ListStopSchedule(ctx context.Context, arg ListStopScheduleParams) ([]ListStopScheduleRow, error)
 	ListStops(ctx context.Context, arg ListStopsParams) ([]ListStopsRow, error)
 	UpsertSourceHealthSuccess(ctx context.Context, arg UpsertSourceHealthSuccessParams) error
 }

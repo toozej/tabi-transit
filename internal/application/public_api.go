@@ -61,7 +61,37 @@ type RiderInfo interface {
 	Route(context.Context, string) (persistence.RouteDetail, error)
 	RouteStops(context.Context, string, *int) ([]persistence.RouteStop, string, error)
 	RouteShapes(context.Context, string, *int) ([]persistence.RouteShape, string, error)
+	StopSchedule(context.Context, persistence.ScheduleFilter) ([]persistence.ScheduleTime, string, string, error)
+	StopArrivals(context.Context, persistence.ArrivalFilter) ([]persistence.Arrival, error)
+	Alerts(context.Context, persistence.AlertFilter) ([]persistence.Alert, string, error)
+	Alert(context.Context, string) (persistence.Alert, error)
 }
+
+func (s Service) StopSchedule(ctx context.Context, q persistence.ScheduleFilter) ([]persistence.ScheduleTime, string, string, error) {
+	if s.RiderInfo == nil {
+		return nil, "", "", ErrUnavailable
+	}
+	return s.RiderInfo.StopSchedule(ctx, q)
+}
+func (s Service) StopArrivals(ctx context.Context, q persistence.ArrivalFilter) ([]persistence.Arrival, error) {
+	if s.RiderInfo == nil {
+		return nil, ErrUnavailable
+	}
+	return s.RiderInfo.StopArrivals(ctx, q)
+}
+func (s Service) Alerts(ctx context.Context, q persistence.AlertFilter) ([]persistence.Alert, string, error) {
+	if s.RiderInfo == nil {
+		return nil, "", ErrUnavailable
+	}
+	return s.RiderInfo.Alerts(ctx, q)
+}
+func (s Service) Alert(ctx context.Context, id string) (persistence.Alert, error) {
+	if s.RiderInfo == nil {
+		return persistence.Alert{}, ErrUnavailable
+	}
+	return s.RiderInfo.Alert(ctx, id)
+}
+
 type NearbyQuery struct {
 	Coordinate                        persistence.Coordinate
 	RadiusMeters, LimitPerMode, Limit int

@@ -48,6 +48,21 @@ func (f *fakeRiderInfo) RouteStops(context.Context, string, *int) ([]persistence
 func (f *fakeRiderInfo) RouteShapes(context.Context, string, *int) ([]persistence.RouteShape, string, error) {
 	return []persistence.RouteShape{{ID: "fixture:shape:20", RouteID: "fixture:route:20", Coordinates: [][]float64{{-122.67, 45.52}, {-122.66, 45.53}}}}, "fixture-v1", nil
 }
+func (f *fakeRiderInfo) StopSchedule(_ context.Context, q persistence.ScheduleFilter) ([]persistence.ScheduleTime, string, string, error) {
+	direction := 0
+	return []persistence.ScheduleTime{{TripID: "fixture:trip:night", RouteID: "fixture:route:20", StopID: q.StopID, ServiceDate: q.ServiceDate, DirectionID: &direction, Headsign: "Night", ServiceDaySeconds: 90930, DepartureAt: time.Date(2026, 7, 23, 1, 15, 30, 0, time.UTC)}}, "fixture-v1", "", nil
+}
+func (f *fakeRiderInfo) StopArrivals(_ context.Context, q persistence.ArrivalFilter) ([]persistence.Arrival, error) {
+	trip := "fixture:trip:night"
+	sequence := 2
+	return []persistence.Arrival{{ID: "fixture:arrival:night", StopID: q.StopID, RouteID: "fixture:route:20", Status: "scheduled", ScheduledAt: time.Date(2026, 7, 23, 1, 15, 30, 0, time.UTC), TripID: &trip, StopSequence: &sequence, Freshness: persistence.StaticFreshness{ActivatedAt: time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)}}}, nil
+}
+func (f *fakeRiderInfo) Alerts(context.Context, persistence.AlertFilter) ([]persistence.Alert, string, error) {
+	return []persistence.Alert{{ID: "fixture:alert:one", Revision: "fixture-1", Header: "Fixture alert", Effect: "other", Source: "fixture", FetchedAt: time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC), ProcessedAt: time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC)}}, "", nil
+}
+func (f *fakeRiderInfo) Alert(context.Context, string) (persistence.Alert, error) {
+	return persistence.Alert{ID: "fixture:alert:one", Revision: "fixture-1", Header: "Fixture alert", Effect: "other", Source: "fixture", FetchedAt: time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC), ProcessedAt: time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC)}, nil
+}
 
 func (fakeCatalog) ListRoutes(context.Context, application.RouteQuery) (application.Page[application.Route], error) {
 	return application.Page[application.Route]{Items: []application.Route{{ID: "fixture:route:20", Mode: "bus", ShortName: "20", LongName: "Fixture"}}, StaticFeedVersion: "fixture-v1"}, nil
@@ -172,7 +187,13 @@ func TestRiderInformationStaticResponsesAndNearbyGrouping(t *testing.T) {
 	if w = request(h, "/v1/routes/fixture:route:20/shape"); w.Code != http.StatusOK || w.Header().Get("Content-Type") != "application/geo+json; charset=utf-8" {
 		t.Fatalf("shape: %d %#v", w.Code, w.Header())
 	}
-	if w = request(h, "/v1/stops/fixture:stop:1/arrivals"); w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "source_unavailable") {
-		t.Fatalf("arrivals must not fabricate realtime: %d %s", w.Code, w.Body.String())
+	if w = request(h, "/v1/stops/fixture:stop:1/arrivals"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"status":"scheduled"`) {
+		t.Fatalf("arrivals: %d %s", w.Code, w.Body.String())
+	}
+	if w = request(h, "/v1/stops/fixture:stop:1/schedule?serviceDate=2026-07-22"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"serviceDaySeconds":90930`) {
+		t.Fatalf("schedule after midnight: %d %s", w.Code, w.Body.String())
+	}
+	if w = request(h, "/v1/alerts?effect=other"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"fixture:alert:one"`) {
+		t.Fatalf("alerts: %d %s", w.Code, w.Body.String())
 	}
 }

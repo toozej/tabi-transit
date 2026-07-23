@@ -95,6 +95,53 @@ type RouteShape struct {
 	Coordinates [][]float64
 }
 
+// ScheduleTime intentionally retains GTFS service-day seconds. Values past
+// 86400 describe after-midnight service and must not be wrapped to midnight.
+type ScheduleTime struct {
+	TripID, RouteID, StopID, ServiceDate string
+	DirectionID                          *int
+	Headsign                             string
+	ServiceDaySeconds                    int
+	DepartureAt                          time.Time
+}
+type Arrival struct {
+	ID, StopID, RouteID, Status string
+	DirectionID                 *int
+	Headsign                    string
+	ScheduledAt                 time.Time
+	EstimatedAt                 *time.Time
+	TripID                      *string
+	StopSequence                *int
+	Freshness                   StaticFreshness
+}
+type Alert struct {
+	ID, Revision, Header, Description, Cause, Effect, SourceURL, Source string
+	ActiveFrom, ActiveUntil                                             *time.Time
+	FetchedAt, ProcessedAt                                              time.Time
+}
+type ScheduleFilter struct {
+	StopID, ServiceDate, RouteID, Cursor string
+	DirectionID                          *int
+	Limit                                int
+}
+type ArrivalFilter struct {
+	StopID           string
+	Minutes          int
+	RouteIDs         []string
+	DirectionID      *int
+	IncludeScheduled bool
+	Now              time.Time
+}
+type AlertFilter struct {
+	RouteIDs, StopIDs, Modes []string
+	Effect                   string
+	Active                   bool
+	UpdatedSince             *time.Time
+	Cursor                   string
+	Limit                    int
+	Now                      time.Time
+}
+
 type VehicleFilter struct{ SourceIDs []string }
 type CatalogRoute struct {
 	ID, Mode, ShortName, LongName string
@@ -151,6 +198,10 @@ type RiderInfoReader interface {
 	GetRoute(context.Context, string) (RouteDetail, error)
 	ListRouteStops(context.Context, string, *int) ([]RouteStop, string, error)
 	ListRouteShapes(context.Context, string, *int) ([]RouteShape, string, error)
+	ListStopSchedule(context.Context, ScheduleFilter) ([]ScheduleTime, string, string, error)
+	ListStopArrivals(context.Context, ArrivalFilter) ([]Arrival, error)
+	ListAlerts(context.Context, AlertFilter) ([]Alert, string, error)
+	GetAlert(context.Context, string) (Alert, error)
 }
 
 // StaticImporterWriter supports a staging import followed by an atomic feed

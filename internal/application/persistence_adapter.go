@@ -34,6 +34,18 @@ func (s PersistenceRiderInfo) RouteStops(ctx context.Context, id string, directi
 func (s PersistenceRiderInfo) RouteShapes(ctx context.Context, id string, direction *int) ([]persistence.RouteShape, string, error) {
 	return s.Reader.ListRouteShapes(ctx, id, direction)
 }
+func (s PersistenceRiderInfo) StopSchedule(ctx context.Context, q persistence.ScheduleFilter) ([]persistence.ScheduleTime, string, string, error) {
+	return s.Reader.ListStopSchedule(ctx, q)
+}
+func (s PersistenceRiderInfo) StopArrivals(ctx context.Context, q persistence.ArrivalFilter) ([]persistence.Arrival, error) {
+	return s.Reader.ListStopArrivals(ctx, q)
+}
+func (s PersistenceRiderInfo) Alerts(ctx context.Context, q persistence.AlertFilter) ([]persistence.Alert, string, error) {
+	return s.Reader.ListAlerts(ctx, q)
+}
+func (s PersistenceRiderInfo) Alert(ctx context.Context, id string) (persistence.Alert, error) {
+	return s.Reader.GetAlert(ctx, id)
+}
 
 func (s PersistenceCatalog) ListRoutes(ctx context.Context, q RouteQuery) (Page[Route], error) {
 	page, err := s.Reader.ListCatalogRoutes(ctx, persistence.CatalogFilter{

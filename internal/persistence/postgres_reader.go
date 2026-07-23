@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -162,6 +163,95 @@ func (r *PostgresReader) ListRouteShapes(ctx context.Context, id string, directi
 		out = append(out, RouteShape{ID: row.ShapeID, RouteID: row.RoutePublicID, DirectionID: int2Ptr(row.DirectionID), Coordinates: geometry.Coordinates})
 	}
 	return out, version, nil
+}
+
+func (r *PostgresReader) ListStopSchedule(ctx context.Context, filter ScheduleFilter) ([]ScheduleTime, string, string, error) {
+	if filter.Limit < 1 || filter.Limit > 100 {
+		return nil, "", "", fmt.Errorf("schedule limit out of range")
+	}
+	date, err := time.Parse("2006-01-02", filter.ServiceDate)
+	if err != nil {
+		return nil, "", "", err
+	}
+	rows, err := r.queries.ListStopSchedule(ctx, sqlcgen.ListStopScheduleParams{StopID: filter.StopID, RouteID: filter.RouteID, DirectionID: int2(filter.DirectionID), Cursor: filter.Cursor, RowLimit: int32(filter.Limit + 1), ServiceDate: pgtype.Date{Time: date, Valid: true}})
+	if err != nil {
+		return nil, "", "", err
+	}
+	next := ""
+	if len(rows) > filter.Limit {
+		next = rows[filter.Limit-1].TripID
+		rows = rows[:filter.Limit]
+	}
+	items := make([]ScheduleTime, 0, len(rows))
+	version := ""
+	for _, row := range rows {
+		version = row.VersionLabel
+		seconds := int(row.ServiceDaySeconds.Int32)
+		// No agency timezone is normalized yet. Keep the authoritative service
+		// seconds and omit departureAt rather than label a UTC instant as local.
+		items = append(items, ScheduleTime{TripID: row.TripID, RouteID: row.RouteID, StopID: row.StopID, ServiceDate: filter.ServiceDate, DirectionID: int2Ptr(row.DirectionID), Headsign: row.Headsign, ServiceDaySeconds: seconds})
+	}
+	return items, version, next, nil
+}
+
+// ListStopArrivals deliberately remains unavailable until an agency service
+// timezone is part of normalized feed metadata. Treating UTC as service time
+// would turn valid after-midnight times into false rider-facing estimates.
+func (r *PostgresReader) ListStopArrivals(context.Context, ArrivalFilter) ([]Arrival, error) {
+	return nil, errors.New("arrival service timezone unavailable")
+}
+
+func (r *PostgresReader) ListAlerts(ctx context.Context, filter AlertFilter) ([]Alert, string, error) {
+	if filter.Limit < 1 || filter.Limit > 100 {
+		return nil, "", fmt.Errorf("alert limit out of range")
+	}
+	updated := pgtype.Timestamptz{}
+	if filter.UpdatedSince != nil {
+		updated = pgtype.Timestamptz{Time: *filter.UpdatedSince, Valid: true}
+	}
+	now := filter.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	rows, err := r.queries.ListCurrentAlerts(ctx, sqlcgen.ListCurrentAlertsParams{ActiveOnly: filter.Active, NowAt: pgtype.Timestamptz{Time: now, Valid: true}, Effect: filter.Effect, UpdatedSince: updated, Cursor: filter.Cursor, RowLimit: int32(filter.Limit + 1)})
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(rows) > filter.Limit {
+		last := rows[filter.Limit-1]
+		next = last.SourceID + ":alert:" + last.EntityID
+		rows = rows[:filter.Limit]
+	}
+	out := make([]Alert, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, alertModel(row.SourceID, row.EntityID, textPtr(row.Cause), textPtr(row.Effect), row.HeaderText, row.DescriptionText, row.Url, timestampPtr(row.ActiveFrom), timestampPtr(row.ActiveUntil), timestamp(row.FetchedAt), timestamp(row.ProcessedAt)))
+	}
+	return out, next, nil
+}
+func (r *PostgresReader) GetAlert(ctx context.Context, id string) (Alert, error) {
+	parts := strings.SplitN(id, ":alert:", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return Alert{}, ErrInvalidPublicID
+	}
+	row, err := r.queries.GetCurrentAlert(ctx, sqlcgen.GetCurrentAlertParams{SourceID: parts[0], EntityID: parts[1]})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Alert{}, ErrNotFound
+	}
+	if err != nil {
+		return Alert{}, err
+	}
+	return alertModel(row.SourceID, row.EntityID, textPtr(row.Cause), textPtr(row.Effect), row.HeaderText, row.DescriptionText, row.Url, timestampPtr(row.ActiveFrom), timestampPtr(row.ActiveUntil), timestamp(row.FetchedAt), timestamp(row.ProcessedAt)), nil
+}
+func alertModel(source, id string, cause, effect *string, header, description, url string, from, until *time.Time, fetched, processed time.Time) Alert {
+	result := Alert{ID: source + ":alert:" + id, Revision: fetched.UTC().Format(time.RFC3339Nano), Header: header, Description: description, SourceURL: url, Source: source, ActiveFrom: from, ActiveUntil: until, FetchedAt: fetched, ProcessedAt: processed}
+	if cause != nil {
+		result.Cause = *cause
+	}
+	if effect != nil {
+		result.Effect = *effect
+	}
+	return result
 }
 
 func catalogStop(id, name, mode string, longitude, latitude float64, routeIDs []string, parent *string, wheelchair int16) CatalogStop {
