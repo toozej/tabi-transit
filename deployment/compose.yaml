@@ -1,0 +1,135 @@
+name: ${COMPOSE_PROJECT_NAME:-tabi}
+
+x-backend-common: &backend-common
+  image: ${TABI_BACKEND_IMAGE:?set an immutable TABI_BACKEND_IMAGE in release.env}
+  restart: unless-stopped
+  environment:
+    APP_ENV: ${APP_ENV:-production}
+    HTTP_LISTEN_ADDR: ${HTTP_LISTEN_ADDR:-:8080}
+    LOG_FORMAT: ${LOG_FORMAT:-json}
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    DATABASE_HOST: postgres
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: ${POSTGRES_DB:-tabi}
+    DATABASE_USER: ${POSTGRES_USER:-tabi}
+    DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
+    TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
+    MAPBOX_SERVER_TOKEN_FILE: /run/secrets/mapbox_server_token
+    INSTALLATION_AUTH_KEY_FILE: /run/secrets/installation_auth_key
+    FEED_ARCHIVE_DIR: /var/lib/tabi/feed-archive
+    STATIC_ARTIFACT_DIR: /var/lib/tabi/static-artifacts
+  secrets:
+    - postgres_password
+    - trimet_app_id
+    - mapbox_server_token
+    - installation_auth_key
+  depends_on:
+    postgres:
+      condition: service_healthy
+  logging: &rotated-logs
+    driver: local
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  caddy:
+    image: ${CADDY_IMAGE:?set an immutable CADDY_IMAGE in release.env}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      TABI_API_DOMAIN: ${TABI_API_DOMAIN:?set TABI_API_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend]
+    logging: *rotated-logs
+
+  api:
+    <<: *backend-common
+    command: ["/app/transit-api"]
+    expose: ["8080"]
+    networks: [frontend, backend, egress]
+    healthcheck:
+      test:
+        ["CMD", "/app/tabi-healthcheck", "http://127.0.0.1:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  realtime-poller:
+    <<: *backend-common
+    command: ["/app/realtime-poller"]
+    networks: [backend, egress]
+    volumes:
+      - ${TABI_FEED_ARCHIVE_DIR:-/var/lib/tabi/feed-archive}:/var/lib/tabi/feed-archive
+
+  notification-worker:
+    <<: *backend-common
+    profiles: [notifications]
+    command: ["/app/notification-worker"]
+    networks: [backend, egress]
+
+  postgres:
+    image: ${POSTGIS_IMAGE:?set an immutable POSTGIS_IMAGE in release.env}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tabi}
+      POSTGRES_USER: ${POSTGRES_USER:-tabi}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *rotated-logs
+
+  migrate:
+    <<: *backend-common
+    profiles: [jobs]
+    restart: "no"
+    command: ["/app/tabi-migrate", "up"]
+    networks: [backend, egress]
+
+  gtfs-importer:
+    <<: *backend-common
+    profiles: [jobs]
+    restart: "no"
+    command: ["/app/gtfs-importer"]
+    networks: [backend, egress]
+    volumes:
+      - ${TABI_FEED_ARCHIVE_DIR:-/var/lib/tabi/feed-archive}:/var/lib/tabi/feed-archive
+      - ${TABI_STATIC_ARTIFACT_DIR:-/var/lib/tabi/static-artifacts}:/var/lib/tabi/static-artifacts
+
+networks:
+  frontend: {}
+  backend:
+    internal: true
+  egress: {}
+
+volumes:
+  postgres_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+secrets:
+  postgres_password:
+    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/postgres_password
+  trimet_app_id:
+    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/trimet_app_id
+  mapbox_server_token:
+    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/mapbox_server_token
+  installation_auth_key:
+    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/installation_auth_key

@@ -1,0 +1,61 @@
+# Local environment and secret material. Checked-in examples remain allowed.
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+
+# JavaScript / TypeScript
+node_modules/
+.pnpm-store/
+.turbo/
+.cache/
+coverage/
+dist/
+build/
+*.tsbuildinfo
+
+# Expo / React Native artifacts and signing material
+.expo/
+.expo-shared/
+android/
+ios/
+*.keystore
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+GoogleService-Info.plist
+google-services.json
+
+# Go and test artifacts
+bin/
+*.test
+*.prof
+
+# Local databases, backups, and Compose state
+*.sqlite
+*.sqlite3
+*.db
+postgres-data/
+deployment/data/
+deployment/backups/
+
+# Secrets and credentials (documented templates and README files are allowed)
+deployment/secrets/*
+!deployment/secrets/README.md
+!deployment/secrets/**/*.example
+*.pem
+*.key
+*.crt
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Preserve the implementation source archive at the repository root. Other
+# transient archives are ignored; source fixtures should use explicit formats.
+*.zip
+!tabi-implementation-plan.zip

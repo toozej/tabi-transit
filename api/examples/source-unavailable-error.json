@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "source_unavailable",
+    "message": "Vehicle positions are temporarily unavailable.",
+    "requestId": "req_source_01",
+    "retryAfterSeconds": 30,
+    "source": "trimet-gtfsrt-vehicle-positions",
+    "details": []
+  }
+}

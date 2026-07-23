@@ -1,0 +1,1051 @@
+openapi: 3.0.3
+info:
+  title: Tabi Transit API
+  version: 0.1.0
+  description: |
+    Public, normalized transit data API. All instants use ISO 8601 UTC, all
+    coordinates are GeoJSON-position arrays ordered [longitude, latitude], and
+    realtime values always include freshness metadata.
+  contact:
+    name: Tabi Transit
+servers:
+  - url: https://api.example.invalid
+    description: Placeholder public API origin; clients configure the deployment origin.
+tags:
+  - name: Health
+    description: Process liveness and data readiness.
+  - name: Configuration
+    description: Public client configuration without credentials.
+  - name: Stops
+    description: Normalized static and nearby stop data.
+  - name: Routes
+    description: Normalized static route data.
+  - name: Vehicles
+    description: Current normalized vehicle snapshots.
+security: []
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Report whether the process is live.
+      responses:
+        "200":
+          description: The process is accepting requests.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/HealthResponse" },
+                  example: { status: ok, requestId: req_live_01 },
+                },
+            }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Report whether core data can be served.
+      responses:
+        "200":
+          description: Core data is available.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/HealthResponse" },
+                  example: { status: ok, requestId: req_ready_01 },
+                },
+            }
+        "503": { $ref: "#/components/responses/TemporarilyUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/config:
+    get:
+      tags: [Configuration]
+      operationId: getConfig
+      summary: Get public application and data-source configuration.
+      parameters: [{ $ref: "#/components/parameters/IfNoneMatch" }]
+      responses:
+        "200":
+          description: Public configuration without credentials.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Api-Version: { $ref: "#/components/headers/ApiVersion" },
+            }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/ConfigResponse" },
+                  example: { $ref: "#/components/examples/ConfigResponse" },
+                },
+            }
+        "304": { $ref: "#/components/responses/NotModified" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/routes:
+    get:
+      tags: [Routes]
+      operationId: listRoutes
+      summary: List normalized routes.
+      parameters:
+        - { $ref: "#/components/parameters/Modes" }
+        - name: serviceDate
+          in: query
+          schema: { $ref: "#/components/schemas/ServiceDate" }
+        - name: query
+          in: query
+          description: Case-insensitive route display-name or ID prefix; no provider query is performed.
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: A stable page of routes.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+              X-Static-Feed-Version:
+                { $ref: "#/components/headers/StaticFeedVersion" },
+            }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/RouteCollection" },
+                  example: { $ref: "#/components/examples/RouteCollection" },
+                },
+            }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/stops:
+    get:
+      tags: [Stops]
+      operationId: listStops
+      summary: List or prefix-search normalized stops.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - { $ref: "#/components/parameters/Modes" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A stable page of stops.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/StopCollection" },
+                  example: { $ref: "#/components/examples/StopCollection" },
+                },
+            }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/stops/nearby:
+    get:
+      tags: [Stops]
+      operationId: listNearbyStops
+      summary: Find nearby stops grouped by selected mode.
+      description: Distances are straight-line meters. `limitPerMode` limits each mode group independently; `limit` caps the total result count.
+      parameters:
+        - { $ref: "#/components/parameters/Latitude" }
+        - { $ref: "#/components/parameters/Longitude" }
+        - name: radiusMeters
+          in: query
+          schema: { type: integer, minimum: 50, maximum: 10000, default: 1000 }
+        - { $ref: "#/components/parameters/Modes" }
+        - { $ref: "#/components/parameters/Limit" }
+        - name: limitPerMode
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20 }
+        - name: includeArrivals
+          in: query
+          schema: { type: boolean, default: false }
+        - name: wheelchairAccessible
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Nearby stops ordered by distance within each mode group.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/NearbyStopsResponse" },
+                  example:
+                    { $ref: "#/components/examples/NearbyStopsResponse" },
+                },
+            }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/vehicles:
+    get:
+      tags: [Vehicles]
+      operationId: listVehicles
+      summary: Get the current normalized vehicle snapshot.
+      parameters:
+        - { $ref: "#/components/parameters/Modes" }
+        - name: routes
+          in: query
+          description: Comma-separated source-qualified route IDs.
+          schema: { type: string, maxLength: 2000 }
+        - name: directions
+          in: query
+          schema: { type: string, pattern: "^(0|1)(,(0|1))*$" }
+        - name: sources
+          in: query
+          schema: { type: string, maxLength: 500 }
+        - name: freshness
+          in: query
+          schema: { $ref: "#/components/schemas/FreshnessStatus" }
+        - name: bbox
+          in: query
+          description: west,south,east,north in WGS84 degrees.
+          schema:
+            {
+              type: string,
+              pattern: '^-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?$',
+            }
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, geojson], default: json }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: Current vehicle snapshot; stale records are explicitly marked.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/VehicleCollection" }
+                  - { $ref: "#/components/schemas/VehicleFeatureCollection" }
+              examples:
+                {
+                  json: { $ref: "#/components/examples/VehicleCollection" },
+                  geojson: { $ref: "#/components/examples/VehicleGeoJSON" },
+                }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "503": { $ref: "#/components/responses/SourceUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/vehicles/search:
+    get:
+      tags: [Vehicles]
+      operationId: searchVehicles
+      summary: Search current vehicle IDs, exact match first.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            {
+              type: string,
+              minLength: 1,
+              maxLength: 100,
+              pattern: "^[A-Za-z0-9:_-]+$",
+            }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Exact match, if present, precedes partial matches.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/VehicleSearchResponse" },
+                  example:
+                    { $ref: "#/components/examples/VehicleSearchResponse" },
+                },
+            }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/vehicles/{id}:
+    get:
+      tags: [Vehicles]
+      operationId: getVehicle
+      summary: Get one current normalized vehicle.
+      parameters:
+        [
+          { $ref: "#/components/parameters/VehicleId" },
+          { $ref: "#/components/parameters/IfNoneMatch" },
+        ]
+      responses:
+        "200":
+          description: Current vehicle detail. Unsupported source fields are omitted.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/VehicleDetailResponse" },
+                  example:
+                    { $ref: "#/components/examples/VehicleDetailResponse" },
+                },
+            }
+        "304": { $ref: "#/components/responses/NotModified" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+components:
+  headers:
+    RequestId:
+      {
+        description: Correlation ID generated or accepted by the API.,
+        schema: { type: string, maxLength: 128 },
+      }
+    ETag:
+      {
+        description: Validator for this representation.,
+        schema: { type: string },
+      }
+    ApiVersion: { description: API semantic version., schema: { type: string } }
+    StaticFeedVersion:
+      { description: Active static feed version., schema: { type: string } }
+  parameters:
+    IfNoneMatch: { name: If-None-Match, in: header, schema: { type: string } }
+    Latitude:
+      {
+        name: lat,
+        in: query,
+        required: true,
+        schema: { type: number, minimum: -90, maximum: 90 },
+      }
+    Longitude:
+      {
+        name: lon,
+        in: query,
+        required: true,
+        schema: { type: number, minimum: -180, maximum: 180 },
+      }
+    Limit:
+      {
+        name: limit,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+      }
+    Cursor:
+      {
+        name: cursor,
+        in: query,
+        description: Opaque cursor returned by a prior response.,
+        schema: { type: string, minLength: 1, maxLength: 1000 },
+      }
+    Modes:
+      {
+        name: modes,
+        in: query,
+        description: Comma-separated modes.,
+        schema:
+          {
+            type: string,
+            pattern: "^(bus|light_rail|streetcar|commuter_rail|ferry|unknown)(,(bus|light_rail|streetcar|commuter_rail|ferry|unknown))*$",
+          },
+      }
+    VehicleId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/QualifiedId" },
+      }
+  responses:
+    NotModified: { description: Representation is unchanged. }
+    ValidationError:
+      {
+        description: Invalid request input.,
+        content:
+          {
+            application/json:
+              {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { $ref: "#/components/examples/ValidationError" },
+              },
+          },
+      }
+    NotFound:
+      {
+        description: Requested entity was not found.,
+        content:
+          {
+            application/json:
+              {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { $ref: "#/components/examples/NotFound" },
+              },
+          },
+      }
+    SourceUnavailable:
+      {
+        description: Required source is unavailable.,
+        headers: { Retry-After: { schema: { type: integer, minimum: 1 } } },
+        content:
+          {
+            application/json:
+              {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { $ref: "#/components/examples/SourceUnavailable" },
+              },
+          },
+      }
+    TemporarilyUnavailable:
+      {
+        description: Service cannot yet serve core data.,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+          },
+      }
+    ErrorResponse:
+      {
+        description: Safe API error.,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+          },
+      }
+  schemas:
+    HealthResponse:
+      {
+        type: object,
+        required: [status, requestId],
+        properties:
+          { status: { type: string, enum: [ok] }, requestId: { type: string } },
+      }
+    Timestamp:
+      { type: string, format: date-time, description: ISO 8601 UTC instant. }
+    ServiceDate:
+      {
+        type: string,
+        format: date,
+        description: Service date in the agency service-day calendar.,
+      }
+    QualifiedId:
+      {
+        type: string,
+        minLength: 3,
+        maxLength: 255,
+        pattern: "^[a-z0-9][a-z0-9_-]*:[A-Za-z0-9:_-]+$",
+        description: Stable source-qualified identifier.,
+      }
+    Coordinate:
+      {
+        type: array,
+        description: "WGS84 position [longitude, latitude].",
+        minItems: 2,
+        maxItems: 2,
+        items: { type: number },
+      }
+    TransitMode:
+      {
+        type: string,
+        enum: [bus, light_rail, streetcar, commuter_rail, ferry, unknown],
+      }
+    FreshnessStatus: { type: string, enum: [fresh, aging, stale, unknown] }
+    Freshness:
+      type: object
+      required: [source, fetchedAt, processedAt, status, ageSeconds, isRealtime]
+      properties:
+        source: { type: string, minLength: 1, maxLength: 128 }
+        sourceUpdatedAt: { $ref: "#/components/schemas/Timestamp" }
+        entityUpdatedAt: { $ref: "#/components/schemas/Timestamp" }
+        fetchedAt: { $ref: "#/components/schemas/Timestamp" }
+        processedAt: { $ref: "#/components/schemas/Timestamp" }
+        status: { $ref: "#/components/schemas/FreshnessStatus" }
+        ageSeconds: { type: integer, minimum: 0 }
+        isRealtime: { type: boolean }
+    ErrorCode:
+      {
+        type: string,
+        enum:
+          [
+            validation_error,
+            not_found,
+            conflict,
+            rate_limited,
+            source_unavailable,
+            temporarily_unavailable,
+            internal_error,
+          ],
+      }
+    ErrorDetail:
+      {
+        type: object,
+        required: [field, code],
+        properties:
+          {
+            field: { type: string },
+            code: { type: string },
+            message: { type: string },
+          },
+      }
+    Error:
+      {
+        type: object,
+        required: [code, message, requestId],
+        properties:
+          {
+            code: { $ref: "#/components/schemas/ErrorCode" },
+            message: { type: string, maxLength: 500 },
+            requestId: { type: string },
+            retryAfterSeconds: { type: integer, minimum: 1 },
+            source: { type: string },
+            details:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/ErrorDetail" },
+              },
+          },
+      }
+    ErrorResponse:
+      {
+        type: object,
+        required: [error],
+        properties: { error: { $ref: "#/components/schemas/Error" } },
+      }
+    Route:
+      {
+        type: object,
+        required: [id, mode, shortName, longName],
+        properties:
+          {
+            id: { $ref: "#/components/schemas/QualifiedId" },
+            mode: { $ref: "#/components/schemas/TransitMode" },
+            shortName: { type: string },
+            longName: { type: string },
+            color: { type: string, pattern: "^[0-9A-Fa-f]{6}$" },
+            textColor: { type: string, pattern: "^[0-9A-Fa-f]{6}$" },
+          },
+      }
+    RouteCollection:
+      {
+        type: object,
+        required: [routes, staticFeedVersion],
+        properties:
+          {
+            routes:
+              { type: array, items: { $ref: "#/components/schemas/Route" } },
+            nextCursor: { type: string },
+            staticFeedVersion: { type: string },
+          },
+      }
+    Stop:
+      {
+        type: object,
+        required: [id, name, coordinate, modes],
+        properties:
+          {
+            id: { $ref: "#/components/schemas/QualifiedId" },
+            name: { type: string },
+            coordinate: { $ref: "#/components/schemas/Coordinate" },
+            modes:
+              {
+                type: array,
+                minItems: 1,
+                items: { $ref: "#/components/schemas/TransitMode" },
+              },
+            parentStopId: { $ref: "#/components/schemas/QualifiedId" },
+            routeIds:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/QualifiedId" },
+              },
+            wheelchairAccessible: { type: boolean },
+          },
+      }
+    StopCollection:
+      {
+        type: object,
+        required: [stops],
+        properties:
+          {
+            stops:
+              { type: array, items: { $ref: "#/components/schemas/Stop" } },
+            nextCursor: { type: string },
+          },
+      }
+    NearbyStop:
+      {
+        allOf:
+          [
+            { $ref: "#/components/schemas/Stop" },
+            {
+              type: object,
+              required: [distanceMeters],
+              properties: { distanceMeters: { type: number, minimum: 0 } },
+            },
+          ],
+      }
+    NearbyStopGroup:
+      {
+        type: object,
+        required: [mode, stops],
+        properties:
+          {
+            mode: { $ref: "#/components/schemas/TransitMode" },
+            stops:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/NearbyStop" },
+              },
+          },
+      }
+    NearbyStopsResponse:
+      {
+        type: object,
+        required: [distanceType, groups, freshness],
+        properties:
+          {
+            distanceType: { type: string, enum: [straight_line] },
+            groups:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/NearbyStopGroup" },
+              },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    Vehicle:
+      type: object
+      required: [id, sourceVehicleId, mode, coordinate, inService, freshness]
+      properties:
+        id: { $ref: "#/components/schemas/QualifiedId" }
+        sourceVehicleId: { type: string }
+        mode: { $ref: "#/components/schemas/TransitMode" }
+        routeId: { $ref: "#/components/schemas/QualifiedId" }
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+        blockId: { $ref: "#/components/schemas/QualifiedId" }
+        directionId: { type: integer, enum: [0, 1] }
+        headsign: { type: string }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        bearing: { type: number, minimum: 0, maximum: 360 }
+        speedMetersPerSecond: { type: number, minimum: 0, nullable: true }
+        currentStopId: { $ref: "#/components/schemas/QualifiedId" }
+        nextStopId: { $ref: "#/components/schemas/QualifiedId" }
+        scheduleDeviationSeconds: { type: integer, nullable: true }
+        inService: { type: boolean }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    VehicleCollection:
+      {
+        type: object,
+        required: [snapshotId, vehicles, freshness],
+        properties:
+          {
+            snapshotId: { type: string },
+            vehicles:
+              { type: array, items: { $ref: "#/components/schemas/Vehicle" } },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    VehicleFeature:
+      type: object
+      required: [type, geometry, properties]
+      properties:
+        type: { type: string, enum: [Feature] }
+        geometry:
+          {
+            type: object,
+            required: [type, coordinates],
+            properties:
+              {
+                type: { type: string, enum: [Point] },
+                coordinates: { $ref: "#/components/schemas/Coordinate" },
+              },
+          }
+        properties: { $ref: "#/components/schemas/Vehicle" }
+    VehicleFeatureCollection:
+      {
+        type: object,
+        required: [type, features, snapshotId, freshness],
+        properties:
+          {
+            type: { type: string, enum: [FeatureCollection] },
+            features:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/VehicleFeature" },
+              },
+            snapshotId: { type: string },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    VehicleSearchResponse:
+      {
+        type: object,
+        required: [query, vehicles, freshness],
+        properties:
+          {
+            query: { type: string },
+            vehicles:
+              { type: array, items: { $ref: "#/components/schemas/Vehicle" } },
+            freshness: { $ref: "#/components/schemas/Freshness" },
+          },
+      }
+    VehicleDetailResponse:
+      {
+        type: object,
+        required: [vehicle],
+        properties: { vehicle: { $ref: "#/components/schemas/Vehicle" } },
+      }
+    Feature:
+      {
+        type: object,
+        required: [enabled],
+        properties: { enabled: { type: boolean }, reason: { type: string } },
+      }
+    ConfigResponse:
+      {
+        type: object,
+        required:
+          [
+            apiVersion,
+            minimumAppVersion,
+            features,
+            sources,
+            staleThresholdSeconds,
+            serviceBounds,
+            staticFeed,
+          ],
+        properties:
+          {
+            apiVersion: { type: string },
+            minimumAppVersion: { type: string },
+            features:
+              {
+                type: object,
+                additionalProperties: { $ref: "#/components/schemas/Feature" },
+              },
+            sources:
+              {
+                type: object,
+                additionalProperties: { $ref: "#/components/schemas/Feature" },
+              },
+            pollingRecommendations:
+              {
+                type: object,
+                additionalProperties: { type: integer, minimum: 1 },
+              },
+            staleThresholdSeconds:
+              {
+                type: object,
+                additionalProperties: { type: integer, minimum: 1 },
+              },
+            serviceBounds:
+              {
+                type: object,
+                required: [bbox],
+                properties:
+                  {
+                    bbox:
+                      {
+                        type: array,
+                        minItems: 4,
+                        maxItems: 4,
+                        items: { type: number },
+                      },
+                  },
+              },
+            staticFeed:
+              {
+                type: object,
+                required: [version, publishedAt],
+                properties:
+                  {
+                    version: { type: string },
+                    publishedAt: { $ref: "#/components/schemas/Timestamp" },
+                  },
+              },
+            urls:
+              {
+                type: object,
+                additionalProperties: { type: string, format: uri },
+              },
+          },
+      }
+  examples:
+    ConfigResponse:
+      {
+        value:
+          {
+            apiVersion: 0.1.0,
+            minimumAppVersion: 0.1.0,
+            features:
+              {
+                vehicleMap: { enabled: true },
+                planner:
+                  { enabled: false, reason: provider credential unavailable },
+              },
+            sources:
+              {
+                trimetGtfsRt: { enabled: true },
+                streetcar: { enabled: false, reason: approval pending },
+              },
+            pollingRecommendations: { vehiclesSeconds: 15 },
+            staleThresholdSeconds: { vehicles: 90 },
+            serviceBounds: { bbox: [-123.0, 45.3, -122.3, 45.8] },
+            staticFeed:
+              { version: trimet-20260722, publishedAt: "2026-07-22T00:00:00Z" },
+            urls:
+              {
+                privacy: "https://example.invalid/privacy",
+                credits: "https://example.invalid/credits",
+              },
+          },
+      }
+    RouteCollection:
+      {
+        value:
+          {
+            routes:
+              [
+                {
+                  id: "trimet:route:20",
+                  mode: bus,
+                  shortName: "20",
+                  longName: Burnside/Stark,
+                  color: "0066CC",
+                },
+              ],
+            staticFeedVersion: trimet-20260722,
+          },
+      }
+    StopCollection:
+      {
+        value:
+          {
+            stops:
+              [
+                {
+                  id: "trimet:stop:8334",
+                  name: W Burnside & NW 5th,
+                  coordinate: [-122.676, 45.523],
+                  modes: [bus],
+                  routeIds: ["trimet:route:20"],
+                  wheelchairAccessible: true,
+                },
+              ],
+          },
+      }
+    NearbyStopsResponse:
+      {
+        value:
+          {
+            distanceType: straight_line,
+            groups:
+              [
+                {
+                  mode: bus,
+                  stops:
+                    [
+                      {
+                        id: "trimet:stop:8334",
+                        name: W Burnside & NW 5th,
+                        coordinate: [-122.676, 45.523],
+                        modes: [bus],
+                        distanceMeters: 120,
+                      },
+                    ],
+                },
+              ],
+            freshness:
+              {
+                source: trimet-gtfs,
+                fetchedAt: "2026-07-22T16:30:02Z",
+                processedAt: "2026-07-22T16:30:02Z",
+                status: fresh,
+                ageSeconds: 0,
+                isRealtime: false,
+              },
+          },
+      }
+    VehicleCollection:
+      {
+        value:
+          {
+            snapshotId: "trimet-vehicle-20260722T163002Z",
+            vehicles:
+              [
+                {
+                  id: "trimet:vehicle:2901",
+                  sourceVehicleId: "2901",
+                  mode: bus,
+                  routeId: "trimet:route:20",
+                  directionId: 1,
+                  headsign: Gresham,
+                  coordinate: [-122.67, 45.52],
+                  bearing: 90,
+                  speedMetersPerSecond: null,
+                  nextStopId: "trimet:stop:8334",
+                  scheduleDeviationSeconds: 120,
+                  inService: true,
+                  freshness:
+                    {
+                      source: trimet-gtfsrt-vehicle-positions,
+                      sourceUpdatedAt: "2026-07-22T16:30:00Z",
+                      entityUpdatedAt: "2026-07-22T16:29:55Z",
+                      fetchedAt: "2026-07-22T16:30:02Z",
+                      processedAt: "2026-07-22T16:30:02Z",
+                      status: fresh,
+                      ageSeconds: 7,
+                      isRealtime: true,
+                    },
+                },
+              ],
+            freshness:
+              {
+                source: trimet-gtfsrt-vehicle-positions,
+                fetchedAt: "2026-07-22T16:30:02Z",
+                processedAt: "2026-07-22T16:30:02Z",
+                status: fresh,
+                ageSeconds: 7,
+                isRealtime: true,
+              },
+          },
+      }
+    VehicleGeoJSON:
+      {
+        value:
+          {
+            type: FeatureCollection,
+            features: [],
+            snapshotId: "trimet-vehicle-20260722T163002Z",
+            freshness:
+              {
+                source: trimet-gtfsrt-vehicle-positions,
+                fetchedAt: "2026-07-22T16:30:02Z",
+                processedAt: "2026-07-22T16:30:02Z",
+                status: fresh,
+                ageSeconds: 7,
+                isRealtime: true,
+              },
+          },
+      }
+    VehicleSearchResponse:
+      {
+        value:
+          {
+            query: "2901",
+            vehicles:
+              [
+                {
+                  id: "trimet:vehicle:2901",
+                  sourceVehicleId: "2901",
+                  mode: bus,
+                  coordinate: [-122.67, 45.52],
+                  inService: true,
+                  freshness:
+                    {
+                      source: trimet-gtfsrt-vehicle-positions,
+                      fetchedAt: "2026-07-22T16:30:02Z",
+                      processedAt: "2026-07-22T16:30:02Z",
+                      status: fresh,
+                      ageSeconds: 7,
+                      isRealtime: true,
+                    },
+                },
+              ],
+            freshness:
+              {
+                source: trimet-gtfsrt-vehicle-positions,
+                fetchedAt: "2026-07-22T16:30:02Z",
+                processedAt: "2026-07-22T16:30:02Z",
+                status: fresh,
+                ageSeconds: 7,
+                isRealtime: true,
+              },
+          },
+      }
+    VehicleDetailResponse:
+      {
+        value:
+          {
+            vehicle:
+              {
+                id: "trimet:vehicle:2901",
+                sourceVehicleId: "2901",
+                mode: bus,
+                routeId: "trimet:route:20",
+                coordinate: [-122.67, 45.52],
+                inService: true,
+                freshness:
+                  {
+                    source: trimet-gtfsrt-vehicle-positions,
+                    fetchedAt: "2026-07-22T16:30:02Z",
+                    processedAt: "2026-07-22T16:30:02Z",
+                    status: aging,
+                    ageSeconds: 35,
+                    isRealtime: true,
+                  },
+              },
+          },
+      }
+    ValidationError:
+      {
+        value:
+          {
+            error:
+              {
+                code: validation_error,
+                message: "lat must be between -90 and 90.",
+                requestId: req_invalid_01,
+                details:
+                  [
+                    {
+                      field: lat,
+                      code: range,
+                      message: "Must be between -90 and 90.",
+                    },
+                  ],
+              },
+          },
+      }
+    NotFound:
+      {
+        value:
+          {
+            error:
+              {
+                code: not_found,
+                message: Vehicle not found.,
+                requestId: req_notfound_01,
+              },
+          },
+      }
+    SourceUnavailable:
+      {
+        value:
+          {
+            error:
+              {
+                code: source_unavailable,
+                message: Vehicle positions are temporarily unavailable.,
+                requestId: req_source_01,
+                retryAfterSeconds: 30,
+                source: trimet-gtfsrt-vehicle-positions,
+                details: [],
+              },
+          },
+      }

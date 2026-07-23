@@ -1,0 +1,37 @@
+{
+  "snapshotId": "trimet-vehicle-20260722T163002Z",
+  "vehicles": [
+    {
+      "id": "trimet:vehicle:2901",
+      "sourceVehicleId": "2901",
+      "mode": "bus",
+      "routeId": "trimet:route:20",
+      "directionId": 1,
+      "headsign": "Gresham",
+      "coordinate": [-122.67, 45.52],
+      "bearing": 90,
+      "speedMetersPerSecond": null,
+      "nextStopId": "trimet:stop:8334",
+      "scheduleDeviationSeconds": 120,
+      "inService": true,
+      "freshness": {
+        "source": "trimet-gtfsrt-vehicle-positions",
+        "sourceUpdatedAt": "2026-07-22T16:30:00Z",
+        "entityUpdatedAt": "2026-07-22T16:29:55Z",
+        "fetchedAt": "2026-07-22T16:30:02Z",
+        "processedAt": "2026-07-22T16:30:02Z",
+        "status": "fresh",
+        "ageSeconds": 7,
+        "isRealtime": true
+      }
+    }
+  ],
+  "freshness": {
+    "source": "trimet-gtfsrt-vehicle-positions",
+    "fetchedAt": "2026-07-22T16:30:02Z",
+    "processedAt": "2026-07-22T16:30:02Z",
+    "status": "fresh",
+    "ageSeconds": 7,
+    "isRealtime": true
+  }
+}

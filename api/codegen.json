@@ -1,0 +1,12 @@
+{
+  "typescript": {
+    "generator": "openapi-typescript",
+    "input": "api/openapi.yaml",
+    "output": "packages/api-client/src/generated/openapi.ts",
+    "ownership": "generated; do not hand edit"
+  },
+  "go": {
+    "status": "deferred until the backend selects a pinned generator through an ADR",
+    "ownership": "generated; do not hand edit"
+  }
+}

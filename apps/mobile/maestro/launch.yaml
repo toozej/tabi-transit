@@ -1,0 +1,5 @@
+appId: app.tabi.transit
+---
+# Bootstrap only. WP-09/WP-16 add backend-fixture flows after the vertical slice.
+- launchApp
+- assertVisible: "Map"

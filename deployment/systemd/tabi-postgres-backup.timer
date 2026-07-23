@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up Tabi every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:20:00
+RandomizedDelaySec=20m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

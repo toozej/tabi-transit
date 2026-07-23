@@ -1,0 +1,15 @@
+# External-source and licensing decision register
+
+| Source / dependency        | Intended use                            | Default                                              | Evidence required before enablement                                   | Current verification |
+| -------------------------- | --------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------- | -------------------- |
+| TriMet GTFS                | Static routes, stops, schedules, shapes | Backend adapter with fixtures                        | Terms, attribution, archive/retention rules, source availability      | Unknown              |
+| TriMet GTFS-Realtime       | Vehicle, trip, and alert snapshots      | Backend adapter with fixtures                        | Terms/rate, schema behavior, source health thresholds                 | Unknown              |
+| TriMet Web Services        | Arrivals, enrichment, planner           | Disabled without AppID; interface/fixtures permitted | AppID, terms, rate/cache/attribution and beta expectations            | Unknown              |
+| Mapbox Maps                | Mobile map rendering                    | Adapter allowed; token not committed                 | Token scopes/restrictions, attribution, telemetry/privacy review      | Unknown              |
+| Mapbox Search/Geocoding    | Place search                            | No persistent storage by default                     | Selected product terms, storage/cache restrictions, budget            | Unknown              |
+| Portland Streetcar / UmoIQ | Optional realtime/source data           | Disabled; no scraping                                | Canonical ownership, written rights, API/license/rate/attribution     | Unknown              |
+| Rose City Transit          | Optional source/advanced data           | Disabled; no scraping                                | Written API/export rights, license, rate, attribution, history rights | Unknown              |
+| Expo Push / APNs / FCM     | Later notifications                     | Deferred                                             | Product scope, privacy/store forms, credentials, retention controls   | Unknown              |
+| Fly.io                     | Optional deployment                     | Not canonical; no free-tier assertion                | Current pricing, billing approval, PostGIS/backup/secret isolation    | Unknown              |
+
+Rules: credentials stay out of Git and mobile bundles when privileged; routine tests use sanitized fixtures; features remain disabled until their evidence is recorded; no source is described as partnered or approved without documented proof.

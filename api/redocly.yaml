@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  operation-operationId: error
+  operation-4xx-response: off
+  info-license: off

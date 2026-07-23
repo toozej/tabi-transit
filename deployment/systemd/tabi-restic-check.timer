@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Tabi restic integrity check monthly
+
+[Timer]
+OnCalendar=monthly
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

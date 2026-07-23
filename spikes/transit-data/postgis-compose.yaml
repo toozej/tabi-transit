@@ -1,0 +1,12 @@
+services:
+  postgis:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: tabi_spike
+      POSTGRES_USER: tabi_spike
+      POSTGRES_PASSWORD: tabi_spike_only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tabi_spike -d tabi_spike"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

@@ -1,0 +1,8 @@
+[Unit]
+Description=Verify Tabi restic repository integrity
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/tabi/deployment/scripts/restic-check.sh

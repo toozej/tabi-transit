@@ -1,0 +1,31 @@
+{
+  "name": "tabi",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tabi transit monorepo",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=20.19.0 <23",
+    "pnpm": ">=10.13.1 <11"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "build": "corepack pnpm --recursive --if-present run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.31.0",
+    "@redocly/cli": "2.40.0",
+    "@types/node": "22.16.5",
+    "eslint": "9.31.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.6.2",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.37.0",
+    "vitest": "3.2.4"
+  }
+}

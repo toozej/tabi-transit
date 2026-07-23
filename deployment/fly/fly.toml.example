@@ -1,0 +1,31 @@
+# Optional adapter only; Compose remains canonical. Verify current Fly pricing and approvals before use.
+app = "tabi-example"
+primary_region = "REPLACE_WITH_APPROVED_REGION"
+
+[build]
+image = "ghcr.io/example/tabi-backend@sha256:REPLACE_WITH_A_VERIFIED_DIGEST"
+
+[processes]
+web = "/app/transit-api"
+poller = "/app/realtime-poller"
+worker = "/app/notification-worker"
+
+[http_service]
+internal_port = 8080
+force_https = true
+processes = ["web"]
+auto_start_machines = true
+auto_stop_machines = "off"
+min_machines_running = 1
+
+[[http_service.checks]]
+grace_period = "20s"
+interval = "15s"
+method = "GET"
+path = "/health/ready"
+timeout = "5s"
+
+[env]
+APP_ENV = "production"
+HTTP_LISTEN_ADDR = ":8080"
+LOG_FORMAT = "json"

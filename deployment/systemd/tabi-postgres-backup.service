@@ -1,0 +1,9 @@
+[Unit]
+Description=Back up Tabi PostgreSQL and persistent artifacts
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tabi
+ExecStart=/opt/tabi/deployment/scripts/backup-postgres.sh

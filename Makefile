@@ -1,0 +1,84 @@
+.DEFAULT_GOAL := help
+.PHONY: help bootstrap format format-check lint typecheck test test-unit test-integration test-e2e test-race test-load generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor
+GO_CACHE_DIR := $(CURDIR)/.cache/go-build
+
+help:
+	@printf '%s\n' 'Tabi developer commands:'
+	@printf '%s\n' '  bootstrap format lint typecheck test test-unit test-integration'
+	@printf '%s\n' '  test-e2e test-race test-load generate generate-check db-up db-migrate'
+	@printf '%s\n' '  dev-api dev-mobile dev-poller build doctor'
+
+bootstrap:
+	@corepack pnpm install --frozen-lockfile
+
+format:
+	@corepack pnpm format
+
+format-check:
+	@corepack pnpm format:check
+
+lint:
+	@corepack pnpm lint
+
+typecheck:
+	@corepack pnpm typecheck
+
+test-unit:
+	@corepack pnpm test
+	@GOCACHE=$(GO_CACHE_DIR) go test ./...
+
+test: test-unit
+
+test-integration:
+	@test -f deployment/compose.yaml || { echo 'integration tests require deployment/compose.yaml (WP-13)'; exit 1; }
+	@docker compose -f deployment/compose.yaml config --quiet
+	@test -x tests/integration/run.sh || { echo 'integration test runner missing: tests/integration/run.sh'; exit 1; }
+	@tests/integration/run.sh
+
+test-e2e:
+	@command -v maestro >/dev/null || { echo 'Maestro CLI is required for mobile E2E tests; see docs/runbooks/local-development.md'; exit 1; }
+	@test -d tests/e2e/maestro || { echo 'Maestro flows are not present yet (WP-08/WP-16)'; exit 1; }
+	@maestro test tests/e2e/maestro
+
+test-race:
+	@GOCACHE=$(GO_CACHE_DIR) go test -race ./...
+
+test-load:
+	@command -v k6 >/dev/null || { echo 'k6 is required for load tests; see docs/runbooks/local-development.md'; exit 1; }
+	@test -d tests/load || { echo 'load test scripts are not present yet (WP-16)'; exit 1; }
+	@k6 run tests/load/*.js
+
+generate:
+	@test -f api/openapi.yaml || { echo 'OpenAPI source missing: api/openapi.yaml (WP-02)'; exit 1; }
+	@test -d packages/api-client || { echo 'API client package missing: packages/api-client (WP-02)'; exit 1; }
+	@corepack pnpm --filter @tabi/api-client generate
+
+generate-check: generate
+	@git diff --exit-code -- api packages/api-client
+
+db-up:
+	@test -f deployment/compose.yaml || { echo 'Compose topology missing: deployment/compose.yaml (WP-13)'; exit 1; }
+	@docker compose -f deployment/compose.yaml up -d db
+
+db-migrate:
+	@test -x db/migrate.sh || { echo 'migration runner missing: db/migrate.sh (WP-03)'; exit 1; }
+	@db/migrate.sh
+
+dev-api:
+	@test -f services/transit-api/main.go || { echo 'transit API entrypoint missing: services/transit-api/main.go (WP-07)'; exit 1; }
+	@go run ./services/transit-api
+
+dev-mobile:
+	@test -f apps/mobile/package.json || { echo 'mobile app missing: apps/mobile/package.json (WP-08)'; exit 1; }
+	@corepack pnpm --dir apps/mobile start -- --dev-client
+
+dev-poller:
+	@test -f services/realtime-poller/main.go || { echo 'realtime poller entrypoint missing: services/realtime-poller/main.go (WP-05)'; exit 1; }
+	@go run ./services/realtime-poller
+
+build:
+	@corepack pnpm build
+	@GOCACHE=$(GO_CACHE_DIR) go build ./...
+
+doctor:
+	@scripts/doctor.sh
