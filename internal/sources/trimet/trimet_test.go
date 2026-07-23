@@ -1,0 +1,205 @@
+package trimet
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+type fixedClock struct{ now time.Time }
+
+func (c fixedClock) Now() time.Time { return c.now }
+
+func TestLoadConfig(t *testing.T) {
+	t.Parallel()
+	secret := "never-log-this-AppID"
+	config, err := LoadConfig(func(key string) string {
+		switch key {
+		case "TRIMET_ENABLED":
+			return "true"
+		case "TRIMET_BASE_URL":
+			return "https://ws.trimet.org"
+		case "TRIMET_APP_ID_FILE":
+			return "/run/secrets/trimet"
+		case "TRIMET_TIMEOUT":
+			return "7s"
+		}
+		return ""
+	}, func(path string) ([]byte, error) {
+		if path != "/run/secrets/trimet" {
+			t.Fatalf("unexpected secret path: %s", path)
+		}
+		return []byte(secret + "\n"), nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.AppID != secret || config.Timeout != 7*time.Second {
+		t.Fatalf("unexpected config: %#v", config)
+	}
+	if _, err := LoadConfig(func(key string) string {
+		if key == "TRIMET_ENABLED" {
+			return "true"
+		}
+		if key == "TRIMET_BASE_URL" {
+			return "https://not-trimet.invalid"
+		}
+		return ""
+	}, func(string) ([]byte, error) { return nil, os.ErrNotExist }); err == nil {
+		t.Fatal("expected invalid enabled config")
+	}
+	if _, err := LoadConfig(func(key string) string {
+		if key == "TRIMET_PLANNER_ENABLED" {
+			return "true"
+		}
+		return ""
+	}, func(string) ([]byte, error) { return nil, nil }); err == nil {
+		t.Fatal("expected planner disabled config error")
+	}
+}
+
+func TestDisabledDoesNotCallProvider(t *testing.T) {
+	t.Parallel()
+	client, err := NewClient(Config{Timeout: time.Second}, &http.Client{}, fixedClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = client.Arrivals(context.Background(), ArrivalsRequest{StopID: "8334", Minutes: 10})
+	if !errors.Is(err, ErrDisabled) {
+		t.Fatalf("got %v", err)
+	}
+	if IsSourceUnavailable(err) {
+		t.Fatal("disabled source must not be treated as transient provider outage")
+	}
+}
+
+func TestArrivalsMapsFixtureAndKeepsCredentialOutOfErrors(t *testing.T) {
+	t.Parallel()
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "..", "tests", "fixtures", "upstream", "trimet", "arrivals.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	appID := "super-secret-app-id"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/ws/v2/arrivals" {
+			t.Errorf("path: %s", request.URL.Path)
+		}
+		if got := request.URL.Query().Get("appID"); got != appID {
+			t.Errorf("AppID not injected")
+		}
+		if request.URL.Query().Get("locIDs") != "8334" {
+			t.Errorf("locIDs missing")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fixture)
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	client, err := NewClient(Config{Enabled: true, AppID: appID, BaseURL: server.URL, AllowedHosts: []string{u.Hostname()}, Timeout: time.Second}, server.Client(), fixedClock{now: time.Date(2026, 7, 22, 16, 30, 2, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrivals, freshness, err := client.Arrivals(context.Background(), ArrivalsRequest{StopID: "8334", Minutes: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arrivals) != 1 || arrivals[0].VehicleID != "2901" || arrivals[0].EstimatedAt == nil {
+		t.Fatalf("unexpected arrivals: %#v", arrivals)
+	}
+	if freshness.Source != SourceID || !freshness.IsRealtime || freshness.FetchedAt.IsZero() {
+		t.Fatalf("unexpected freshness: %#v", freshness)
+	}
+	if strings.Contains(errString(err), appID) || strings.Contains(fmt.Sprint(errors.Unwrap(err)), appID) {
+		t.Fatal("AppID leaked through error")
+	}
+}
+
+func TestClassifiesProviderFailuresWithoutBodyLeakage(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		handler     http.HandlerFunc
+		want        ErrorKind
+		unavailable bool
+	}{
+		{"non-2xx", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("credential=should-not-leak"))
+		}, ErrorUnavailable, true},
+		{"malformed", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("{not-json")) }, ErrorMalformed, false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewTLSServer(tc.handler)
+			defer server.Close()
+			u, _ := url.Parse(server.URL)
+			appID := "very-secret"
+			client, err := NewClient(Config{Enabled: true, AppID: appID, BaseURL: server.URL, AllowedHosts: []string{u.Hostname()}, Timeout: time.Second}, server.Client(), fixedClock{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = client.Arrivals(context.Background(), ArrivalsRequest{StopID: "8334"})
+			var sourceErr *Error
+			if !errors.As(err, &sourceErr) || sourceErr.Kind != tc.want {
+				t.Fatalf("got %v", err)
+			}
+			if IsSourceUnavailable(err) != tc.unavailable {
+				t.Fatalf("unavailable mapping: %v", err)
+			}
+			if strings.Contains(err.Error(), appID) || strings.Contains(fmt.Sprint(errors.Unwrap(err)), appID) || strings.Contains(err.Error(), "credential") {
+				t.Fatalf("secret/provider body leaked: %v", err)
+			}
+		})
+	}
+}
+
+func TestTimeoutAndInvalidRequests(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { time.Sleep(100 * time.Millisecond) }))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	client, err := NewClient(Config{Enabled: true, AppID: "secret", BaseURL: server.URL, AllowedHosts: []string{u.Hostname()}, Timeout: time.Second}, server.Client(), fixedClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	_, _, err = client.Arrivals(ctx, ArrivalsRequest{StopID: "8334"})
+	var sourceErr *Error
+	if !errors.As(err, &sourceErr) || sourceErr.Kind != ErrorTimeout || !IsSourceUnavailable(err) {
+		t.Fatalf("got %v", err)
+	}
+	_, _, err = client.Arrivals(context.Background(), ArrivalsRequest{StopID: "bad\nstop"})
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestPlannerFeatureGate(t *testing.T) {
+	t.Parallel()
+	client, err := NewClient(Config{Timeout: time.Second}, nil, fixedClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = client.Plan(context.Background(), PlanRequest{Origin: "8334", Destination: "1000"})
+	if !errors.Is(err, ErrDisabled) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}

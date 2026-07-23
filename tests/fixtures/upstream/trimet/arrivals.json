@@ -1,0 +1,16 @@
+{
+  "resultSet": {
+    "arrival": [
+      {
+        "locid": "8334",
+        "route": "20",
+        "tripID": "12345",
+        "vehicleID": "2901",
+        "fullSign": "To Gresham TC",
+        "scheduled": "2026-07-22T16:35:00Z",
+        "estimated": "2026-07-22T16:36:00Z",
+        "status": "estimated"
+      }
+    ]
+  }
+}
