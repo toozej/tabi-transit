@@ -202,6 +202,21 @@ type OpsSourceHealth struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RealtimeAlertsCurrent struct {
+	SourceID        string             `json:"source_id"`
+	EntityID        string             `json:"entity_id"`
+	SnapshotID      int64              `json:"snapshot_id"`
+	Cause           pgtype.Text        `json:"cause"`
+	Effect          pgtype.Text        `json:"effect"`
+	HeaderText      pgtype.Text        `json:"header_text"`
+	DescriptionText pgtype.Text        `json:"description_text"`
+	Url             pgtype.Text        `json:"url"`
+	ActiveFrom      pgtype.Timestamptz `json:"active_from"`
+	ActiveUntil     pgtype.Timestamptz `json:"active_until"`
+	FetchedAt       pgtype.Timestamptz `json:"fetched_at"`
+	ProcessedAt     pgtype.Timestamptz `json:"processed_at"`
+}
+
 type RealtimeSnapshot struct {
 	ID               int64              `json:"id"`
 	SourceID         string             `json:"source_id"`
@@ -214,6 +229,32 @@ type RealtimeSnapshot struct {
 	IsValid          bool               `json:"is_valid"`
 	ValidationReport []byte             `json:"validation_report"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type RealtimeTripUpdateStopTimesCurrent struct {
+	SourceID              string             `json:"source_id"`
+	EntityID              string             `json:"entity_id"`
+	StopSequence          int32              `json:"stop_sequence"`
+	StopPublicID          pgtype.Text        `json:"stop_public_id"`
+	ArrivalDelaySeconds   pgtype.Int4        `json:"arrival_delay_seconds"`
+	ArrivalTime           pgtype.Timestamptz `json:"arrival_time"`
+	DepartureDelaySeconds pgtype.Int4        `json:"departure_delay_seconds"`
+	DepartureTime         pgtype.Timestamptz `json:"departure_time"`
+	ScheduleRelationship  pgtype.Text        `json:"schedule_relationship"`
+}
+
+type RealtimeTripUpdatesCurrent struct {
+	SourceID             string             `json:"source_id"`
+	EntityID             string             `json:"entity_id"`
+	SnapshotID           int64              `json:"snapshot_id"`
+	FeedVersionID        pgtype.Int8        `json:"feed_version_id"`
+	TripPublicID         pgtype.Text        `json:"trip_public_id"`
+	RoutePublicID        pgtype.Text        `json:"route_public_id"`
+	StartDate            pgtype.Date        `json:"start_date"`
+	ScheduleRelationship pgtype.Text        `json:"schedule_relationship"`
+	SourceUpdatedAt      pgtype.Timestamptz `json:"source_updated_at"`
+	FetchedAt            pgtype.Timestamptz `json:"fetched_at"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
 }
 
 type RealtimeVehicleCurrent struct {
@@ -256,6 +297,32 @@ type TransitRoute struct {
 	TextColor     pgtype.Text        `json:"text_color"`
 	SortOrder     pgtype.Int4        `json:"sort_order"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type TransitService struct {
+	FeedVersionID int64  `json:"feed_version_id"`
+	ServiceID     string `json:"service_id"`
+}
+
+type TransitServiceCalendar struct {
+	FeedVersionID int64       `json:"feed_version_id"`
+	ServiceID     string      `json:"service_id"`
+	Monday        bool        `json:"monday"`
+	Tuesday       bool        `json:"tuesday"`
+	Wednesday     bool        `json:"wednesday"`
+	Thursday      bool        `json:"thursday"`
+	Friday        bool        `json:"friday"`
+	Saturday      bool        `json:"saturday"`
+	Sunday        bool        `json:"sunday"`
+	StartDate     pgtype.Date `json:"start_date"`
+	EndDate       pgtype.Date `json:"end_date"`
+}
+
+type TransitServiceCalendarDate struct {
+	FeedVersionID int64       `json:"feed_version_id"`
+	ServiceID     string      `json:"service_id"`
+	ServiceDate   pgtype.Date `json:"service_date"`
+	ExceptionType int16       `json:"exception_type"`
 }
 
 type TransitShape struct {

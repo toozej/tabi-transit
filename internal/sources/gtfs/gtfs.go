@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -50,6 +51,12 @@ type StopTime struct {
 type Calendar struct {
 	ServiceID          string
 	StartDate, EndDate string
+	Weekdays           [7]bool // Monday through Sunday, as defined by GTFS.
+}
+type CalendarException struct {
+	ServiceID string
+	Date      string
+	Added     bool // true is exception_type=1; false is exception_type=2.
 }
 type Feed struct {
 	Stops      []Stop
@@ -57,7 +64,7 @@ type Feed struct {
 	Trips      []Trip
 	StopTimes  []StopTime
 	Calendars  []Calendar
-	Exceptions map[string]bool
+	Exceptions []CalendarException
 	SHA256     string
 }
 
@@ -165,7 +172,7 @@ func need(row map[string]string, key, table string) (string, error) {
 	return v, nil
 }
 func build(t map[string][]map[string]string) (Feed, error) {
-	f := Feed{Exceptions: map[string]bool{}}
+	f := Feed{}
 	stops := map[string]bool{}
 	routes := map[string]bool{}
 	trips := map[string]bool{}
@@ -219,22 +226,37 @@ func build(t map[string][]map[string]string) (Feed, error) {
 		if e != nil {
 			return f, e
 		}
-		if start > end {
+		if !gtfsDate(start) || !gtfsDate(end) || start > end {
 			return f, fmt.Errorf("%w: calendar range", ErrInvalidFeed)
 		}
+		weekdays, err := calendarWeekdays(r)
+		if err != nil {
+			return f, err
+		}
 		services[id] = true
-		f.Calendars = append(f.Calendars, Calendar{id, start, end})
+		f.Calendars = append(f.Calendars, Calendar{ServiceID: id, StartDate: start, EndDate: end, Weekdays: weekdays})
 	}
+	exceptions := map[string]struct{}{}
 	for _, r := range t["calendar_dates.txt"] {
 		id, e := need(r, "service_id", "calendar_dates")
 		if e != nil {
 			return f, e
 		}
-		if _, e = need(r, "date", "calendar_dates"); e != nil {
-			return f, e
+		date, e := need(r, "date", "calendar_dates")
+		if e != nil || !gtfsDate(date) {
+			return f, fmt.Errorf("%w: calendar_dates.date", ErrInvalidFeed)
 		}
+		typeValue, e := need(r, "exception_type", "calendar_dates")
+		if e != nil || (typeValue != "1" && typeValue != "2") {
+			return f, fmt.Errorf("%w: calendar_dates.exception_type", ErrInvalidFeed)
+		}
+		key := id + "\x00" + date
+		if _, duplicate := exceptions[key]; duplicate {
+			return f, fmt.Errorf("%w: duplicate calendar exception", ErrInvalidFeed)
+		}
+		exceptions[key] = struct{}{}
 		services[id] = true
-		f.Exceptions[id] = true
+		f.Exceptions = append(f.Exceptions, CalendarException{ServiceID: id, Date: date, Added: typeValue == "1"})
 	}
 	for _, r := range t["trips.txt"] {
 		id, e := need(r, "trip_id", "trips")
@@ -294,6 +316,24 @@ func build(t map[string][]map[string]string) (Feed, error) {
 		return f.StopTimes[i].TripID+fmt.Sprintf("%09d", f.StopTimes[i].Sequence) < f.StopTimes[j].TripID+fmt.Sprintf("%09d", f.StopTimes[j].Sequence)
 	})
 	return f, nil
+}
+func gtfsDate(value string) bool {
+	if len(value) != 8 {
+		return false
+	}
+	parsed, err := time.Parse("20060102", value)
+	return err == nil && parsed.Format("20060102") == value
+}
+func calendarWeekdays(row map[string]string) ([7]bool, error) {
+	var days [7]bool
+	for i, name := range []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"} {
+		value, err := need(row, name, "calendar")
+		if err != nil || (value != "0" && value != "1") {
+			return days, fmt.Errorf("%w: calendar.%s", ErrInvalidFeed, name)
+		}
+		days[i] = value == "1"
+	}
+	return days, nil
 }
 func number(r map[string]string, k, t string) (float64, error) {
 	v, e := need(r, k, t)

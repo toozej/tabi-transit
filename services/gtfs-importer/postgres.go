@@ -53,7 +53,7 @@ func (p PostgresStore) Import(ctx context.Context, source, label, digest string,
 		if active {
 			return true, tx.Commit(ctx)
 		}
-		if _, e = tx.Exec(ctx, `DELETE FROM transit.stop_times WHERE feed_version_id=$1; DELETE FROM transit.trips WHERE feed_version_id=$1; DELETE FROM transit.stops WHERE feed_version_id=$1; DELETE FROM transit.routes WHERE feed_version_id=$1`, id); e != nil {
+		if _, e = tx.Exec(ctx, `DELETE FROM transit.stop_times WHERE feed_version_id=$1; DELETE FROM transit.trips WHERE feed_version_id=$1; DELETE FROM transit.stops WHERE feed_version_id=$1; DELETE FROM transit.routes WHERE feed_version_id=$1; DELETE FROM transit.services WHERE feed_version_id=$1`, id); e != nil {
 			return false, e
 		}
 	} else if e == pgx.ErrNoRows {
@@ -81,6 +81,30 @@ func (p PostgresStore) Import(ctx context.Context, source, label, digest string,
 		_, e = tx.Exec(ctx, `INSERT INTO transit.trips(feed_version_id,public_id,source_trip_id,route_public_id,service_id) VALUES($1,$2,$3,$4,$5)`, id, public(source, "trip", t.ID), t.ID, public(source, "route", t.RouteID), t.ServiceID)
 		if e != nil {
 			return false, fmt.Errorf("insert trip: %w", e)
+		}
+	}
+	for _, calendar := range f.Calendars {
+		_, e = tx.Exec(ctx, `INSERT INTO transit.services(feed_version_id,service_id) VALUES($1,$2)`, id, calendar.ServiceID)
+		if e != nil {
+			return false, fmt.Errorf("insert service: %w", e)
+		}
+		_, e = tx.Exec(ctx, `INSERT INTO transit.service_calendars(feed_version_id,service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11::date)`, id, calendar.ServiceID, calendar.Weekdays[0], calendar.Weekdays[1], calendar.Weekdays[2], calendar.Weekdays[3], calendar.Weekdays[4], calendar.Weekdays[5], calendar.Weekdays[6], calendar.StartDate, calendar.EndDate)
+		if e != nil {
+			return false, fmt.Errorf("insert service calendar: %w", e)
+		}
+	}
+	for _, exception := range f.Exceptions {
+		_, e = tx.Exec(ctx, `INSERT INTO transit.services(feed_version_id,service_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, id, exception.ServiceID)
+		if e != nil {
+			return false, fmt.Errorf("insert exception service: %w", e)
+		}
+		typeValue := 2
+		if exception.Added {
+			typeValue = 1
+		}
+		_, e = tx.Exec(ctx, `INSERT INTO transit.service_calendar_dates(feed_version_id,service_id,service_date,exception_type) VALUES($1,$2,$3::date,$4)`, id, exception.ServiceID, exception.Date, typeValue)
+		if e != nil {
+			return false, fmt.Errorf("insert service calendar date: %w", e)
 		}
 	}
 	for _, st := range f.StopTimes {

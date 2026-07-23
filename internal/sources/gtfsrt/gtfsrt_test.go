@@ -70,6 +70,62 @@ func TestParseRejectsDifferentialAndDuplicateVehicleIDs(t *testing.T) {
 		t.Fatalf("duplicate: %v", err)
 	}
 }
+func TestParseTripUpdatesAndAlerts(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	message := &gtfs.FeedMessage{Header: &gtfs.FeedHeader{GtfsRealtimeVersion: str("2.0"), Timestamp: u64(uint64(now.Unix()))}, Entity: []*gtfs.FeedEntity{
+		{Id: str("trip-entity"), TripUpdate: &gtfs.TripUpdate{
+			Trip:           &gtfs.TripDescriptor{TripId: str("trip-1"), RouteId: str("20"), StartDate: str("20260722")},
+			StopTimeUpdate: []*gtfs.TripUpdate_StopTimeUpdate{{StopSequence: proto.Uint32(1), StopId: str("stop-1"), Arrival: &gtfs.TripUpdate_StopTimeEvent{Delay: proto.Int32(90)}}},
+		}},
+		{Id: str("alert-entity"), Alert: &gtfs.Alert{
+			HeaderText:   &gtfs.TranslatedString{Translation: []*gtfs.TranslatedString_Translation{{Text: str("Fixture alert")}}},
+			ActivePeriod: []*gtfs.TimeRange{{Start: u64(uint64(now.Add(-time.Minute).Unix())), End: u64(uint64(now.Add(time.Hour).Unix()))}},
+		}},
+	}}
+	raw, err := proto.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updates, err := ParseTripUpdates(raw, now, time.Minute, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 1 || updates[0].TripID != "trip-1" || updates[0].StopTimes[0].ArrivalDelaySeconds == nil {
+		t.Fatalf("updates: %#v", updates)
+	}
+	alerts, err := ParseAlerts(raw, now, time.Minute, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alerts) != 1 || alerts[0].Header != "Fixture alert" || alerts[0].ActiveUntil == nil {
+		t.Fatalf("alerts: %#v", alerts)
+	}
+}
+func TestTripUpdatesAndAlertsRejectMalformedOrStale(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	stale := vehicleFeed(uint64(now.Add(-2*time.Minute).Unix()), false, 45.5)
+	for name, parse := range map[string]func([]byte, time.Time, time.Duration, time.Duration) error{
+		"trip": func(raw []byte, n time.Time, age, skew time.Duration) error {
+			_, err := ParseTripUpdates(raw, n, age, skew)
+			return err
+		},
+		"alert": func(raw []byte, n time.Time, age, skew time.Duration) error {
+			_, err := ParseAlerts(raw, n, age, skew)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := parse(stale, now, time.Minute, time.Minute); !errors.Is(err, ErrMalformed) {
+				t.Fatalf("stale: %v", err)
+			}
+			if err := parse([]byte("bad"), now, time.Minute, time.Minute); !errors.Is(err, ErrMalformed) {
+				t.Fatalf("malformed: %v", err)
+			}
+		})
+	}
+}
 func FuzzParseVehiclePositions(f *testing.F) {
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 	f.Add(vehicleFeed(uint64(now.Unix()), false, 45.5))

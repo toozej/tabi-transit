@@ -35,30 +35,38 @@ type Feed struct {
 	Unmatched       int
 	SHA256          string
 }
+type StopTimeUpdate struct {
+	StopSequence          uint32
+	StopID                string
+	ArrivalDelaySeconds   *int32
+	ArrivalTime           *time.Time
+	DepartureDelaySeconds *int32
+	DepartureTime         *time.Time
+	ScheduleRelationship  string
+}
+type TripUpdate struct {
+	EntityID, TripID, RouteID string
+	StartDate                 string
+	ScheduleRelationship      string
+	UpdatedAt                 *time.Time
+	StopTimes                 []StopTimeUpdate
+}
+type Alert struct {
+	EntityID, Cause, Effect  string
+	Header, Description, URL string
+	ActiveFrom, ActiveUntil  *time.Time
+}
 
 // ParseVehiclePositions accepts a complete protobuf message and rejects feeds
 // that cannot safely replace a current vehicle snapshot. Deleted and non-vehicle
 // entities are accounted for but are never used as current vehicles.
 func ParseVehiclePositions(raw []byte, now time.Time, maxAge, futureSkew time.Duration) (Feed, error) {
-	if len(raw) == 0 {
-		return Feed{}, fmt.Errorf("%w: empty payload", ErrMalformed)
-	}
-	var message gtfs.FeedMessage
-	if err := proto.Unmarshal(raw, &message); err != nil {
-		return Feed{}, fmt.Errorf("%w: protobuf decode", ErrMalformed)
-	}
-	if message.Header == nil || message.Header.GetGtfsRealtimeVersion() == "" || message.Header.Timestamp == nil {
-		return Feed{}, fmt.Errorf("%w: required header missing", ErrMalformed)
+	message, updated, err := parseMessage(raw, now, maxAge, futureSkew)
+	if err != nil {
+		return Feed{}, err
 	}
 	// A differential feed cannot safely replace a full current snapshot until
 	// deletion and merge semantics are implemented end-to-end.
-	if message.Header.GetIncrementality() == gtfs.FeedHeader_DIFFERENTIAL {
-		return Feed{}, fmt.Errorf("%w: differential feeds are not supported", ErrMalformed)
-	}
-	updated := time.Unix(int64(message.Header.GetTimestamp()), 0).UTC()
-	if updated.After(now.Add(futureSkew)) || (maxAge > 0 && now.Sub(updated) > maxAge) {
-		return Feed{}, fmt.Errorf("%w: feed timestamp outside permitted age", ErrMalformed)
-	}
 	feed := Feed{SourceUpdatedAt: updated, SHA256: digest(raw)}
 	seenVehicles := make(map[string]struct{}, len(message.Entity))
 	for _, entity := range message.Entity {
@@ -99,6 +107,158 @@ func ParseVehiclePositions(raw []byte, now time.Time, maxAge, futureSkew time.Du
 		return Feed{}, ErrEmpty
 	}
 	return feed, nil
+}
+
+// ParseTripUpdates validates a complete, current-state projection. It does not
+// apply it to storage; callers must keep the last valid state on any error.
+func ParseTripUpdates(raw []byte, now time.Time, maxAge, futureSkew time.Duration) ([]TripUpdate, error) {
+	message, _, err := parseMessage(raw, now, maxAge, futureSkew)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	updates := []TripUpdate{}
+	for _, entity := range message.Entity {
+		if entity.GetIsDeleted() || entity.TripUpdate == nil {
+			continue
+		}
+		if entity.GetId() == "" || entity.TripUpdate.Trip == nil || entity.TripUpdate.Trip.GetTripId() == "" {
+			return nil, fmt.Errorf("%w: incomplete trip update", ErrMalformed)
+		}
+		if _, duplicate := seen[entity.GetId()]; duplicate {
+			return nil, fmt.Errorf("%w: duplicate trip update", ErrMalformed)
+		}
+		seen[entity.GetId()] = struct{}{}
+		update := TripUpdate{EntityID: entity.GetId(), TripID: entity.TripUpdate.Trip.GetTripId(), RouteID: entity.TripUpdate.Trip.GetRouteId(), StartDate: entity.TripUpdate.Trip.GetStartDate(), ScheduleRelationship: entity.TripUpdate.Trip.GetScheduleRelationship().String()}
+		if entity.TripUpdate.Timestamp != nil {
+			value := time.Unix(int64(entity.TripUpdate.GetTimestamp()), 0).UTC()
+			if value.After(now.Add(futureSkew)) {
+				return nil, fmt.Errorf("%w: future trip update", ErrMalformed)
+			}
+			update.UpdatedAt = &value
+		}
+		for _, stop := range entity.TripUpdate.StopTimeUpdate {
+			if stop.GetStopSequence() == 0 && stop.GetStopId() == "" {
+				return nil, fmt.Errorf("%w: trip update stop reference", ErrMalformed)
+			}
+			entry := StopTimeUpdate{StopSequence: stop.GetStopSequence(), StopID: stop.GetStopId(), ScheduleRelationship: stop.GetScheduleRelationship().String()}
+			if stop.Arrival != nil {
+				entry.ArrivalDelaySeconds = stop.Arrival.Delay
+				entry.ArrivalTime = epochInt64Ptr(stop.Arrival.Time, now, futureSkew)
+			}
+			if stop.Departure != nil {
+				entry.DepartureDelaySeconds = stop.Departure.Delay
+				entry.DepartureTime = epochInt64Ptr(stop.Departure.Time, now, futureSkew)
+			}
+			if (stop.Arrival != nil && stop.Arrival.Time != nil && entry.ArrivalTime == nil) || (stop.Departure != nil && stop.Departure.Time != nil && entry.DepartureTime == nil) {
+				return nil, fmt.Errorf("%w: future stop update", ErrMalformed)
+			}
+			update.StopTimes = append(update.StopTimes, entry)
+		}
+		updates = append(updates, update)
+	}
+	if len(updates) == 0 {
+		return nil, ErrEmpty
+	}
+	return updates, nil
+}
+
+// ParseAlerts preserves only bounded rider-facing fields from current alerts.
+func ParseAlerts(raw []byte, now time.Time, maxAge, futureSkew time.Duration) ([]Alert, error) {
+	message, _, err := parseMessage(raw, now, maxAge, futureSkew)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	alerts := []Alert{}
+	for _, entity := range message.Entity {
+		if entity.GetIsDeleted() || entity.Alert == nil {
+			continue
+		}
+		if entity.GetId() == "" {
+			return nil, fmt.Errorf("%w: alert ID", ErrMalformed)
+		}
+		if _, duplicate := seen[entity.GetId()]; duplicate {
+			return nil, fmt.Errorf("%w: duplicate alert", ErrMalformed)
+		}
+		seen[entity.GetId()] = struct{}{}
+		alert := Alert{EntityID: entity.GetId(), Cause: entity.Alert.GetCause().String(), Effect: entity.Alert.GetEffect().String(), Header: translated(entity.Alert.HeaderText), Description: translated(entity.Alert.DescriptionText), URL: translated(entity.Alert.Url)}
+		if len(alert.Header) > 4096 || len(alert.Description) > 16384 || len(alert.URL) > 2048 {
+			return nil, fmt.Errorf("%w: alert text too long", ErrMalformed)
+		}
+		for _, period := range entity.Alert.ActivePeriod {
+			// Alert active windows are allowed to extend into the future; the feed
+			// header remains the freshness authority for the current projection.
+			from, until := epochAnyPtr(period.Start), epochAnyPtr(period.End)
+			if from != nil && until != nil && until.Before(*from) {
+				return nil, fmt.Errorf("%w: invalid alert period", ErrMalformed)
+			}
+			if alert.ActiveFrom == nil || (from != nil && from.Before(*alert.ActiveFrom)) {
+				alert.ActiveFrom = from
+			}
+			if alert.ActiveUntil == nil || (until != nil && until.After(*alert.ActiveUntil)) {
+				alert.ActiveUntil = until
+			}
+		}
+		alerts = append(alerts, alert)
+	}
+	if len(alerts) == 0 {
+		return nil, ErrEmpty
+	}
+	return alerts, nil
+}
+func parseMessage(raw []byte, now time.Time, maxAge, futureSkew time.Duration) (*gtfs.FeedMessage, time.Time, error) {
+	if len(raw) == 0 {
+		return nil, time.Time{}, fmt.Errorf("%w: empty payload", ErrMalformed)
+	}
+	var message gtfs.FeedMessage
+	if err := proto.Unmarshal(raw, &message); err != nil {
+		return nil, time.Time{}, fmt.Errorf("%w: protobuf decode", ErrMalformed)
+	}
+	if message.Header == nil || message.Header.GetGtfsRealtimeVersion() == "" || message.Header.Timestamp == nil {
+		return nil, time.Time{}, fmt.Errorf("%w: required header missing", ErrMalformed)
+	}
+	if message.Header.GetIncrementality() == gtfs.FeedHeader_DIFFERENTIAL {
+		return nil, time.Time{}, fmt.Errorf("%w: differential feeds are not supported", ErrMalformed)
+	}
+	updated := time.Unix(int64(message.Header.GetTimestamp()), 0).UTC()
+	if updated.After(now.Add(futureSkew)) || (maxAge > 0 && now.Sub(updated) > maxAge) {
+		return nil, time.Time{}, fmt.Errorf("%w: feed timestamp outside permitted age", ErrMalformed)
+	}
+	return &message, updated, nil
+}
+func epochPtr(value *uint64, now time.Time, futureSkew time.Duration) *time.Time {
+	if value == nil {
+		return nil
+	}
+	result := time.Unix(int64(*value), 0).UTC()
+	if result.After(now.Add(futureSkew)) {
+		return nil
+	}
+	return &result
+}
+func epochInt64Ptr(value *int64, now time.Time, futureSkew time.Duration) *time.Time {
+	if value == nil {
+		return nil
+	}
+	result := time.Unix(*value, 0).UTC()
+	if result.After(now.Add(futureSkew)) {
+		return nil
+	}
+	return &result
+}
+func epochAnyPtr(value *uint64) *time.Time {
+	if value == nil {
+		return nil
+	}
+	result := time.Unix(int64(*value), 0).UTC()
+	return &result
+}
+func translated(text *gtfs.TranslatedString) string {
+	if text == nil || len(text.Translation) == 0 {
+		return ""
+	}
+	return text.Translation[0].GetText()
 }
 
 func digest(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToString(sum[:]) }
