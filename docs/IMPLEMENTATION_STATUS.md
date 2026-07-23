@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-07-22 (Phase 0 integrated)
+Last updated: 2026-07-23 (Phase 1 vertical-slice implementation integrated)
 
 ## Repository baseline
 
@@ -28,8 +28,8 @@ WP-13 infrastructure is independently gated by the host ADR.
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Completed                | WP-00–03, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | WP-03 migrations/persistence and Phase 1 deployment/quality foundations are integrated. |
 | Completed                | WP-00–06, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | Static import and realtime vehicle snapshot foundations are fixture-proven; real sources remain disabled. |
-| Completed                | WP-00–08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | The public API is fixture-proven; catalog DB composition remains an explicit unavailable state until query adapters land. |
-| Next unblocked           | WP-09 mobile first vertical slice | Consume `/v1/config` and normalized vehicle snapshot/search/detail endpoints through fixture mode first. |
+| Completed                | WP-00–09, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | Fixture-backed public API and mobile vehicle map/list/search/detail flow are integrated; catalog DB composition remains an explicit unavailable state until query adapters land. |
+| Active                   | Vertical-slice integration and QA | Contract, stale/outage, Compose smoke, and mobile fixture-mode evidence are being run without provider calls. |
 | Pending                  | WP-10 through WP-18 | Start only when their stated dependencies and Phase gates are met. |
 | Blocked / evidence-gated | WP-06 real TriMet access, optional sources, production-host deployment, physical RNMapbox proof, mobile RNTL/Vitest harness proof | Implement interfaces and fixtures without credentials; do not scrape. |
 
@@ -48,10 +48,11 @@ WP-13 infrastructure is independently gated by the host ADR.
 - Passed: `make format-check`, `make lint`, `make typecheck`, `make test`, `make test-race`, `make build`, `make doctor`, OpenAPI structural validation/generation/drift checks, Compose topology validation, Go GTFS/GTFS-RT/PostGIS spike tests, and shell syntax checks.
 - Passed: `corepack pnpm --dir apps/mobile typecheck`. Expo printed the expected public config with a feature-disabled empty public Mapbox token, but its command exited when this environment denied creation of `$HOME/.expo`; rerun it in a writable developer/CI home.
 - Passed: an isolated real PostGIS geography query returned nearest bus and light-rail rows with `limitPerMode=1`; GTFS service time `25:15:30` remained `90930` seconds.
-- Not passed / open: mobile RNTL/Vitest execution fails during React Native dependency transformation; native map, SQLite, Maestro, iOS, and Android device gates have not run. Caddy binary validation and systemd verification also require a suitable host environment.
+- Passed: WP-09 mobile fixture mode, runtime Zod validation, ETag-aware remote repository boundary, foreground-only polling configuration, mode/freshness filters, exact-ID-first search, source/freshness detail, accessible list alternative, and one fleet plus selected-vehicle `ShapeSource` update path. `corepack pnpm --dir apps/mobile typecheck`, `test` (6 files/10 tests), and `expo config --type public` passed on 2026-07-23.
+- Not passed / open: React Native Testing Library with this Vitest dependency pair reaches an untransformed React Native Flow entrypoint; pure logic remains in Vitest under ADR-0002. Native map, SQLite, Maestro, iOS, and Android device gates have not run. Caddy binary validation and systemd verification also require a suitable host environment.
 - OpenAPI lint completes with warnings about component-example reference shape; structural validation and generated-client drift pass. Resolve those warnings before using examples as formal response-conformance fixtures.
 - Passed in the approved network environment: pinned sqlc v1.30.0 generation and `go test ./...`; ordinary sandbox `make generate` cannot reach `proxy.golang.org` and is an environment network gate, not a generated-code drift failure.
 
 ## Next integration milestone
 
-Integrate and validate WP-04 GTFS importer. WP-05 realtime poller starts after WP-04 provides the required static identifier-mapping contract.
+Complete cross-component vertical-slice QA. The physical development-build demonstration (Mapbox token/device and Maestro) remains a required Phase 1 exit gate and cannot be claimed from this environment.

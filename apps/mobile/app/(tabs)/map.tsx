@@ -1,5 +1,5 @@
-import { VehicleMapSpike } from "@/features/vehicles/VehicleMapSpike";
+import { VehicleExplorer } from "@/features/vehicles/VehicleExplorer";
 
 export default function MapRoute() {
-  return <VehicleMapSpike />;
+  return <VehicleExplorer />;
 }

@@ -1,6 +1,20 @@
 # Tabi mobile compatibility spike (WP-08)
 
-This is an Expo development-build application foundation. It deliberately has no backend calls or provider access.
+This is an Expo development-build application foundation. Vehicle screens use
+the normalized Tabi API only; they never call a transit provider directly.
+
+## Vehicle vertical slice (WP-09)
+
+The map tab defaults to deterministic fixture mode and renders the same
+normalized vehicle data through a Mapbox `ShapeSource` (when a public Maps SDK
+token is configured) and an accessible list/detail flow. It supports mode and
+freshness filters, exact-ID-first vehicle search, source/age display, and an
+explicit stale/source-unavailable state. Polling is foreground-only and remote
+snapshot requests use ETags when supplied.
+
+Set `EXPO_PUBLIC_API_MODE=remote` and a valid `EXPO_PUBLIC_API_BASE_URL` only
+for a Tabi development API; invalid/missing remote configuration fails at the
+mobile boundary. Fixture mode is the safe default and uses no network.
 
 ## Local commands
 
@@ -19,7 +33,12 @@ Copy `.env.example` to a local ignored environment file only when a restricted p
 
 - The map adapter uses one `ShapeSource` with 1,500 deterministic synthetic vehicle points and native `SymbolLayer`/`CircleLayer` layers; it does not use fleet `MarkerView`s.
 - The SQLite migration unit proof verifies the transaction and version guard through the Expo SQLite executor interface. It is not a physical-device SQLite proof.
-- The RNTL/Vitest test proves basic RNTL query wiring using a deliberately small React Native host-component test shim. It is not evidence that native Mapbox rendering works in Vitest; native behavior remains a Maestro/device responsibility.
+- RNTL/Vitest compatibility is not currently a pass claim. Native Mapbox
+  rendering remains a Maestro/device responsibility regardless of the harness.
+- The installed RNTL/Vitest dependency pair currently reaches React Native's
+  untransformed Flow entrypoint under Vitest. Component `.tsx` tests are kept
+  outside the passing pure-Vitest command until the harness ADR gate is
+  resolved; repository, filter, freshness, and GeoJSON tests run in Vitest.
 - `maestro/launch.yaml` is a bootstrap flow. It requires an installed development build and Maestro CLI.
 - Physical iOS/Android development builds, Mapbox style/location-puck rendering, ShapeSource press/filter validation, New Architecture validation, actual SQLite migration, and Maestro launch are unrun evidence gates until devices and an approved token are available.
 

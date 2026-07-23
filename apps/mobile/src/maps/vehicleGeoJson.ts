@@ -1,18 +1,18 @@
-import type { SyntheticVehicle } from "@/domain/vehicles";
+import type { Vehicle } from "@/domain/vehicleModels";
 
 export type VehicleFeatureCollection = GeoJSON.FeatureCollection<
   GeoJSON.Point,
   {
     id: string;
-    mode: SyntheticVehicle["mode"];
-    routeId: string;
-    freshness: SyntheticVehicle["freshness"];
-    bearing: number;
+    mode: Vehicle["mode"];
+    routeId?: string;
+    freshness: Vehicle["freshness"]["status"];
+    bearing?: number;
   }
 >;
 
 export function toVehicleFeatureCollection(
-  vehicles: readonly SyntheticVehicle[],
+  vehicles: readonly Vehicle[],
 ): VehicleFeatureCollection {
   return {
     type: "FeatureCollection",
@@ -27,7 +27,7 @@ export function toVehicleFeatureCollection(
         id: vehicle.id,
         mode: vehicle.mode,
         routeId: vehicle.routeId,
-        freshness: vehicle.freshness,
+        freshness: vehicle.freshness.status,
         bearing: vehicle.bearing,
       },
     })),

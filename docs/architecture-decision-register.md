@@ -11,7 +11,7 @@
 | ADR-0007 | Fly.io optional image adapter                  | Accepted | Architecture/Infra            | Current pricing, capacity, database, backup review |
 | ADR-0008 | Defer optional expansions                      | Accepted | Architecture/Product/Security | Feature-specific ADR evidence                      |
 | D-010    | Exact Expo/RNMapbox/native SDK matrix          | Deferred | Mobile                        | Physical development-build evidence                |
-| D-011    | Vitest/RNTL compatibility harness              | Deferred | Mobile/QA                     | Proven test, or Maestro fallback ADR               |
+| ADR-0009 / D-011 | Vitest/RNTL compatibility harness       | Accepted evidence gate | Mobile/QA            | RNTL/Vitest proof remains required; pure Vitest plus Maestro/device fallback documented |
 | D-012    | Vehicle payload JSON vs GeoJSON                | Deferred | API/Mobile                    | Synthetic fleet payload/render benchmark           |
 | D-013    | SQLite artifact vs JSON sync                   | Deferred | Mobile/Backend                | Size, migration, and offline profiling             |
 | D-016    | VPS/provider, DNS, SSH/VPN, backup target      | Deferred | Operations/Security           | Operator selection and documented evidence         |

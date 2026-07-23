@@ -4,7 +4,8 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@tabi/api-client": ["../../packages/api-client/src/generated/openapi.ts"]
     }
   },
   "include": [

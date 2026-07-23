@@ -1,6 +1,8 @@
 import type { ExpoConfig, ConfigContext } from "expo/config";
 
 const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+const apiMode = process.env.EXPO_PUBLIC_API_MODE ?? "fixture";
+const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -25,5 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     mapboxAccessToken: mapboxAccessToken ?? "",
     mapboxConfigured: Boolean(mapboxAccessToken),
+    apiMode,
+    apiBaseUrl,
   },
 });
