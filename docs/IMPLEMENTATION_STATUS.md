@@ -27,9 +27,9 @@ WP-13 infrastructure is independently gated by the host ADR.
 | State                    | Work packages                                                                                                                     | Notes                                                                 |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Completed                | WP-00–03, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | WP-03 migrations/persistence and Phase 1 deployment/quality foundations are integrated. |
-| Completed                | WP-00–03, WP-06, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | TriMet adapter is fixture-proven and feature-disabled pending D-001 evidence. |
-| Active                   | WP-04 GTFS importer | Establishes the static identifier mapping required by WP-05. |
-| Pending                  | WP-05 and WP-07 through WP-18 | Start only when their stated dependencies and Phase gates are met. |
+| Completed                | WP-00–04, WP-06, WP-08, WP-13, WP-16, WP-17, transit-data/PostGIS spike, Compose spike | GTFS importer has a fixture-proven transactional activation flow and static ID mapping. |
+| Next unblocked           | WP-05 GTFS-Realtime poller | Uses WP-04's source-qualified stop/route/trip mapping and preserves last valid snapshots. |
+| Pending                  | WP-07 through WP-18 | Start only when their stated dependencies and Phase gates are met. |
 | Blocked / evidence-gated | WP-06 real TriMet access, optional sources, production-host deployment, physical RNMapbox proof, mobile RNTL/Vitest harness proof | Implement interfaces and fixtures without credentials; do not scrape. |
 
 ## Decisions awaiting evidence
