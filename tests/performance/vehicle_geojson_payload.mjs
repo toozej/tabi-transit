@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* global console */
+import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
 
 const fleetSizes = [1000, 1500, 3000];
