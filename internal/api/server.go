@@ -42,6 +42,9 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 	r.Get("/health/ready", s.readiness)
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/config", s.getConfig)
+		r.Get("/search", s.placeSearch)
+		r.Get("/geocode/reverse", s.reverseGeocode)
+		r.Post("/journeys/plan", s.planJourney)
 		r.Get("/routes", s.routes)
 		r.Get("/stops", s.stops)
 		r.Get("/stops/nearby", s.nearbyStops)
@@ -59,6 +62,21 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 		r.Get("/vehicles/{id}", s.vehicle)
 	})
 	return r
+}
+
+// The planning and external-place endpoints deliberately fail closed until
+// their documented provider gates are approved and an adapter is composed.
+// Do not parse or log potentially sensitive query/body values while disabled.
+func (s *Server) placeSearch(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeaturePlaceSearch)
+}
+
+func (s *Server) reverseGeocode(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeaturePlaceSearch)
+}
+
+func (s *Server) planJourney(w http.ResponseWriter, r *http.Request) {
+	s.featureUnavailable(w, r, application.FeatureJourneyPlanner)
 }
 func (s *Server) nearbyStops(w http.ResponseWriter, r *http.Request) {
 	lat, lon, ok := parseCoordinate(r, w)
@@ -431,7 +449,7 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	c := s.config.API
-	body := map[string]any{"apiVersion": c.Version, "minimumAppVersion": c.MinimumAppVersion, "features": map[string]any{"vehicleMap": map[string]any{"enabled": true}}, "sources": map[string]any{"trimetGtfsRt": map[string]any{"enabled": true}}, "pollingRecommendations": map[string]int{"vehiclesSeconds": 15}, "staleThresholdSeconds": map[string]int{"vehicles": c.StaleThresholdSeconds}, "serviceBounds": map[string]any{"bbox": []float64{-123, 45.3, -122.3, 45.8}}, "staticFeed": map[string]any{"version": c.StaticFeedVersion, "publishedAt": c.StaticFeedPublishedAt.UTC().Format(time.RFC3339)}}
+	body := map[string]any{"apiVersion": c.Version, "minimumAppVersion": c.MinimumAppVersion, "features": map[string]any{"vehicleMap": map[string]any{"enabled": true}, "placeSearch": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "journeyPlanner": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}}, "sources": map[string]any{"trimetGtfsRt": map[string]any{"enabled": true}}, "pollingRecommendations": map[string]int{"vehiclesSeconds": 15}, "staleThresholdSeconds": map[string]int{"vehicles": c.StaleThresholdSeconds}, "serviceBounds": map[string]any{"bbox": []float64{-123, 45.3, -122.3, 45.8}}, "staticFeed": map[string]any{"version": c.StaticFeedVersion, "publishedAt": c.StaticFeedPublishedAt.UTC().Format(time.RFC3339)}}
 	w.Header().Set("X-Api-Version", c.Version)
 	s.etag(w, r, body)
 }
@@ -559,6 +577,10 @@ func (s *Server) vehicle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) unavailable(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Retry-After", "30")
 	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Vehicle positions are temporarily unavailable.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-vehicle-positions"})
+}
+func (s *Server) featureUnavailable(w http.ResponseWriter, r *http.Request, feature string) {
+	w.Header().Set("Retry-After", "3600")
+	s.error(w, r, http.StatusServiceUnavailable, "feature_unavailable", "This optional feature is disabled pending its documented decision gate.", map[string]any{"retryAfterSeconds": 3600, "source": "feature-gate:" + feature})
 }
 func (s *Server) etag(w http.ResponseWriter, r *http.Request, body any) {
 	b, _ := json.Marshal(body)

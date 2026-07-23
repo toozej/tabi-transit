@@ -45,3 +45,14 @@ Copy `.env.example` to a local ignored environment file only when a restricted p
 ## Ownership and next step
 
 WP-09 consumes the `src/maps/` adapter and replaces synthetic data with normalized API data after WP-07. Keep router files thin and preserve the equivalent accessible list/detail flow.
+
+## Fixture trip planning foundation (WP-11)
+
+The Plan tab is a provider-independent planning shell. It offers deterministic
+stop endpoint pickers, constraints, an accessible timeline that mirrors
+map-friendly leg geometry, safe opaque-ID planning links, and an explicit
+location-denied path. The mobile repository is deliberately fixture-only: it
+does not call Mapbox, TriMet, or any planner directly while D-001/D-004 and the
+server planner contract remain unresolved. Planning links never include precise
+coordinates or search text, and no endpoint or location data is persisted by
+this foundation.

@@ -14,11 +14,11 @@ failures = []
 failures << 'openapi must be 3.0.x' unless document['openapi'].to_s.start_with?('3.0.')
 %w[info paths components].each { |key| failures << "missing top-level #{key}" unless document.key?(key) }
 paths = document['paths'] || {}
-%w[/health/live /health/ready /v1/config /v1/routes /v1/stops /v1/stops/nearby /v1/vehicles /v1/vehicles/search /v1/vehicles/{id}].each do |path_name|
+%w[/health/live /health/ready /v1/config /v1/routes /v1/stops /v1/stops/nearby /v1/vehicles /v1/vehicles/search /v1/vehicles/{id} /v1/search /v1/geocode/reverse /v1/journeys/plan].each do |path_name|
   failures << "missing required path #{path_name}" unless paths.key?(path_name)
 end
 schemas = document.dig('components', 'schemas') || {}
-%w[ErrorResponse Freshness ConfigResponse Route Stop Vehicle].each { |name| failures << "missing schema #{name}" unless schemas.key?(name) }
+%w[ErrorResponse Freshness ConfigResponse Route Stop Vehicle PlaceResult JourneyPlanRequest JourneyPlanResponse Itinerary].each { |name| failures << "missing schema #{name}" unless schemas.key?(name) }
 failures << 'vehicle search must be declared before /v1/vehicles/{id} for unambiguous routing documentation' unless paths.keys.index('/v1/vehicles/search') < paths.keys.index('/v1/vehicles/{id}')
 
 if failures.empty?

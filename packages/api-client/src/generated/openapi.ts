@@ -339,6 +339,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/search": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Find normalized transit entities and, when enabled, provider-neutral places.
+     * @description Exact Tabi transit matches precede optional external place results. The optional
+     *     `sessionId` is an opaque, short-lived picker session identifier; it is not a
+     *     provider token and clients must not persist it. External search is disabled
+     *     until the Mapbox terms, attribution, storage, and budget decision gate passes.
+     */
+    get: operations["searchPlaces"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/geocode/reverse": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Resolve a coordinate to a provider-neutral place when enabled.
+     * @description This endpoint is feature-gated pending Mapbox terms, attribution, storage, and
+     *     budget review. Request coordinates are used only for this explicit operation
+     *     and are not a history API.
+     */
+    get: operations["reverseGeocode"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/journeys/plan": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Plan a normalized A-to-B journey when the planner feature is enabled.
+     * @description Provider responses are normalized before they leave the backend. Unsupported
+     *     preferences are disclosed in `unsupportedPreferences`; hard constraints are
+     *     enforced or the request returns no itineraries. The planner remains disabled
+     *     until the TriMet AppID and terms/rate/cache/attribution decision gate passes.
+     */
+    post: operations["planJourney"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -389,6 +457,7 @@ export interface components {
       | "conflict"
       | "rate_limited"
       | "source_unavailable"
+      | "feature_unavailable"
       | "temporarily_unavailable"
       | "internal_error";
     ErrorDetail: {
@@ -655,6 +724,193 @@ export interface components {
     VehicleDetailResponse: {
       vehicle: components["schemas"]["Vehicle"];
     };
+    /** @enum {string} */
+    PlaceKind:
+      | "stop"
+      | "station"
+      | "route"
+      | "vehicle"
+      | "address"
+      | "poi"
+      | "intersection"
+      | "place"
+      | "unknown";
+    PlaceKinds: string;
+    /**
+     * @description Tabi identifies normalized transit data; external identifies a normalized approved place provider without exposing its payload.
+     * @enum {string}
+     */
+    PlaceSource: "tabi" | "external" | "unknown";
+    /** @description WGS84 bounding box [west, south, east, north]. */
+    BoundingBox: number[];
+    PlaceResult: {
+      /** @description Opaque stable result identifier within its source. */
+      id: string;
+      source: components["schemas"]["PlaceSource"];
+      kind: components["schemas"]["PlaceKind"];
+      name: string;
+      subtitle?: string;
+      coordinate?: components["schemas"]["Coordinate"];
+      bbox?: components["schemas"]["BoundingBox"];
+      stopId?: components["schemas"]["QualifiedId"];
+      routeId?: components["schemas"]["QualifiedId"];
+      vehicleId?: components["schemas"]["QualifiedId"];
+      /** @description Opaque provider reference only when terms permit returning it. */
+      externalReference?: string;
+      /** @description Required display attribution, when supplied by the source. */
+      attribution?: string;
+    };
+    PlaceSearchResponse: {
+      query: string;
+      results: components["schemas"]["PlaceResult"][];
+      freshness: components["schemas"]["Freshness"];
+    };
+    ReverseGeocodeResponse: {
+      result: components["schemas"]["PlaceResult"];
+      freshness: components["schemas"]["Freshness"];
+    };
+    JourneyLocation:
+      | components["schemas"]["CoordinateJourneyLocation"]
+      | components["schemas"]["StopJourneyLocation"]
+      | components["schemas"]["PlaceJourneyLocation"]
+      | components["schemas"]["LocalJourneyLocation"];
+    CoordinateJourneyLocation: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "coordinate";
+      coordinate: components["schemas"]["Coordinate"];
+      label?: string;
+    };
+    StopJourneyLocation: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stop";
+      stopId: components["schemas"]["QualifiedId"];
+      label?: string;
+    };
+    PlaceJourneyLocation: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "place";
+      /** @description Opaque identifier from an immediately preceding picker response. */
+      placeId: string;
+      coordinate: components["schemas"]["Coordinate"];
+      label?: string;
+    };
+    LocalJourneyLocation: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "saved" | "recent";
+      /** @description Device-local reference; the backend does not persist it. */
+      localId: string;
+      coordinate: components["schemas"]["Coordinate"];
+      label?: string;
+    };
+    JourneyTime: {
+      /** @enum {string} */
+      mode: "depart_at" | "arrive_by";
+      value: components["schemas"]["Timestamp"];
+    };
+    /** @enum {string} */
+    JourneyOptimize: "fastest" | "fewer_transfers" | "least_walking";
+    /** @enum {string} */
+    JourneyPreferenceName:
+      | "modes"
+      | "max_transfers"
+      | "max_walking_meters"
+      | "wheelchair_accessible"
+      | "optimize";
+    JourneyPreferences: {
+      modes?: components["schemas"]["TransitMode"][];
+      /** @description Hard maximum; plans exceeding it are excluded. */
+      maxTransfers?: number;
+      /** @description Hard maximum; plans exceeding it are excluded. */
+      maxWalkingMeters?: number;
+      /** @description Requests sourced accessibility support; unsupported provider capability is disclosed. */
+      wheelchairAccessible?: boolean;
+      optimize?: components["schemas"]["JourneyOptimize"];
+    };
+    JourneyPlanRequest: {
+      origin: components["schemas"]["JourneyLocation"];
+      destination: components["schemas"]["JourneyLocation"];
+      time: components["schemas"]["JourneyTime"];
+      preferences?: components["schemas"]["JourneyPreferences"];
+    };
+    JourneyEndpoint: {
+      /** @enum {string} */
+      type: "coordinate" | "stop" | "place" | "saved" | "recent";
+      coordinate: components["schemas"]["Coordinate"];
+      label?: string;
+      stopId?: components["schemas"]["QualifiedId"];
+    };
+    JourneyGeometry: {
+      coordinates: components["schemas"]["Coordinate"][];
+      /** @description True when geometry is not provider or GTFS shape geometry. */
+      isApproximate: boolean;
+    };
+    /** @enum {string} */
+    JourneyLegType: "walk" | "transit" | "wait" | "transfer";
+    JourneyLeg: {
+      type: components["schemas"]["JourneyLegType"];
+      startAt: components["schemas"]["Timestamp"];
+      endAt: components["schemas"]["Timestamp"];
+      durationSeconds: number;
+      from: components["schemas"]["JourneyEndpoint"];
+      to: components["schemas"]["JourneyEndpoint"];
+      distanceMeters?: number;
+      route?: components["schemas"]["Route"];
+      tripId?: components["schemas"]["QualifiedId"];
+      headsign?: string;
+      boardStopId?: components["schemas"]["QualifiedId"];
+      alightStopId?: components["schemas"]["QualifiedId"];
+      realtime?: boolean;
+      geometry?: components["schemas"]["JourneyGeometry"];
+      alertIds?: components["schemas"]["QualifiedId"][];
+      /** @enum {string} */
+      accessibility?: "supported" | "unsupported" | "unknown";
+      freshness?: components["schemas"]["Freshness"];
+    };
+    UnsupportedJourneyPreference: {
+      name: components["schemas"]["JourneyPreferenceName"];
+      reason: string;
+    };
+    Itinerary: {
+      /** @description Opaque itinerary identifier scoped to this response. */
+      id: string;
+      departureAt: components["schemas"]["Timestamp"];
+      arrivalAt: components["schemas"]["Timestamp"];
+      durationSeconds: number;
+      transfers: number;
+      walkingMeters: number;
+      score?: number;
+      rankingReason?: string;
+      legs: components["schemas"]["JourneyLeg"][];
+      alertIds?: components["schemas"]["QualifiedId"][];
+      /** @enum {string} */
+      accessibility?: "supported" | "unsupported" | "unknown";
+      freshness: components["schemas"]["Freshness"];
+    };
+    JourneyPlanResponse: {
+      /** @description Opaque optional identifier; clients must not treat it as durable. */
+      planId?: string;
+      expiresAt?: components["schemas"]["Timestamp"];
+      origin: components["schemas"]["JourneyEndpoint"];
+      destination: components["schemas"]["JourneyEndpoint"];
+      itineraries: components["schemas"]["Itinerary"][];
+      appliedPreferences?: components["schemas"]["JourneyPreferenceName"][];
+      unsupportedPreferences?: components["schemas"]["UnsupportedJourneyPreference"][];
+      /** @description Normalized planner source identifier. */
+      source: string;
+      freshness: components["schemas"]["Freshness"];
+    };
     Feature: {
       enabled: boolean;
       reason?: string;
@@ -714,6 +970,16 @@ export interface components {
     };
     /** @description Required source is unavailable. */
     SourceUnavailable: {
+      headers: {
+        "Retry-After"?: number;
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Requested optional feature is disabled pending its documented decision gate or is temporarily unavailable. */
+    FeatureUnavailable: {
       headers: {
         "Retry-After"?: number;
         [name: string]: unknown;
@@ -1376,6 +1642,103 @@ export interface operations {
       };
       304: components["responses"]["NotModified"];
       404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  searchPlaces: {
+    parameters: {
+      query: {
+        q: string;
+        /** @description Comma-separated result kinds to include. */
+        types?: components["schemas"]["PlaceKinds"];
+        /** @description Optional explicit proximity for this request. It is not retained by the API. */
+        lat?: number;
+        /** @description Optional explicit proximity for this request. It is not retained by the API. */
+        lon?: number;
+        /** @description Optional WGS84 west,south,east,north bias or restriction. */
+        bbox?: string;
+        language?: string;
+        /** @description Opaque ephemeral picker session identifier; never a provider credential. */
+        sessionId?: string;
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Exact normalized transit matches appear before other results. */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlaceSearchResponse"];
+        };
+      };
+      400: components["responses"]["ValidationError"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  reverseGeocode: {
+    parameters: {
+      query: {
+        lat: components["parameters"]["Latitude"];
+        lon: components["parameters"]["Longitude"];
+        language?: string;
+        /** @description Opaque ephemeral picker session identifier; never a provider credential. */
+        sessionId?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A normalized place result with any required attribution. */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReverseGeocodeResponse"];
+        };
+      };
+      400: components["responses"]["ValidationError"];
+      503: components["responses"]["FeatureUnavailable"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  planJourney: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["JourneyPlanRequest"];
+      };
+    };
+    responses: {
+      /** @description Ranked normalized itineraries, which may be empty when no option meets hard constraints. */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JourneyPlanResponse"];
+        };
+      };
+      400: components["responses"]["ValidationError"];
+      429: components["responses"]["ErrorResponse"];
+      503: components["responses"]["FeatureUnavailable"];
       default: components["responses"]["ErrorResponse"];
     };
   };

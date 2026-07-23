@@ -52,7 +52,11 @@ type Service struct {
 	Catalog   Catalog
 	Vehicles  VehicleStore
 	RiderInfo RiderInfo
-	Now       func() time.Time
+	// Planning remains feature-gated until D-001 (TriMet planner) and D-004
+	// (Mapbox search/geocoding) have reviewed credentials, terms, retention,
+	// attribution, and supported constraint semantics.
+	Planning PlanningFeatures
+	Now      func() time.Time
 }
 
 type RiderInfo interface {

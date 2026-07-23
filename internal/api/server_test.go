@@ -156,6 +156,44 @@ func TestUnavailableAndRateLimit(t *testing.T) {
 	}
 }
 
+func TestPhaseThreeFeatureGatesFailClosed(t *testing.T) {
+	h := testServer(t, fakeVehicles{})
+	config := request(h, "/v1/config")
+	var configResponse struct {
+		Features map[string]struct {
+			Enabled bool   `json:"enabled"`
+			Reason  string `json:"reason"`
+		} `json:"features"`
+	}
+	if err := json.Unmarshal(config.Body.Bytes(), &configResponse); err != nil || configResponse.Features["placeSearch"].Enabled || configResponse.Features["journeyPlanner"].Enabled || configResponse.Features["placeSearch"].Reason != "external_provider_gate_pending" {
+		t.Fatalf("feature config = %#v, err=%v", configResponse.Features, err)
+	}
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/v1/search?q=private+address"},
+		{method: http.MethodGet, path: "/v1/geocode/reverse?lat=45.52&lon=-122.67"},
+		{method: http.MethodPost, path: "/v1/journeys/plan"},
+	} {
+		r := httptest.NewRequest(tc.method, tc.path, nil)
+		r.RemoteAddr = "198.51.100.7:123"
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "3600" {
+			t.Fatalf("%s %s = %d, headers=%#v", tc.method, tc.path, w.Code, w.Header())
+		}
+		var response struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.Error.Code != "feature_unavailable" {
+			t.Fatalf("%s %s response = %s, err=%v", tc.method, tc.path, w.Body.String(), err)
+		}
+	}
+}
+
 func TestRiderInformationStaticResponsesAndNearbyGrouping(t *testing.T) {
 	rider := &fakeRiderInfo{nearby: []persistence.NearbyStop{{ID: "fixture:stop:1", Name: "Bus", Mode: "bus", Coordinate: persistence.Coordinate{Longitude: -122.67, Latitude: 45.52}, DistanceMeters: 12}, {ID: "fixture:stop:2", Name: "Rail", Mode: "light_rail", Coordinate: persistence.Coordinate{Longitude: -122.68, Latitude: 45.53}, DistanceMeters: 40}}}
 	h := testRiderServer(t, rider)

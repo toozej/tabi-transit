@@ -24,6 +24,10 @@ tags:
     description: Current normalized vehicle snapshots.
   - name: Alerts
     description: Normalized service alerts with preserved source semantics.
+  - name: Search
+    description: Provider-neutral transit and place discovery for picker flows.
+  - name: Journeys
+    description: Feature-gated normalized A-to-B planning.
 security: []
 paths:
   /health/live:
@@ -661,6 +665,110 @@ paths:
         "304": { $ref: "#/components/responses/NotModified" }
         "404": { $ref: "#/components/responses/NotFound" }
         default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/search:
+    get:
+      tags: [Search]
+      operationId: searchPlaces
+      summary: Find normalized transit entities and, when enabled, provider-neutral places.
+      description: |
+        Exact Tabi transit matches precede optional external place results. The optional
+        `sessionId` is an opaque, short-lived picker session identifier; it is not a
+        provider token and clients must not persist it. External search is disabled
+        until the Mapbox terms, attribution, storage, and budget decision gate passes.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: types
+          in: query
+          description: Comma-separated result kinds to include.
+          schema: { $ref: "#/components/schemas/PlaceKinds" }
+        - name: lat
+          in: query
+          description: Optional explicit proximity for this request. It is not retained by the API.
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lon
+          in: query
+          description: Optional explicit proximity for this request. It is not retained by the API.
+          schema: { type: number, minimum: -180, maximum: 180 }
+        - name: bbox
+          in: query
+          description: Optional WGS84 west,south,east,north bias or restriction.
+          schema: { type: string, maxLength: 128 }
+        - name: language
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 35 }
+        - name: sessionId
+          in: query
+          description: Opaque ephemeral picker session identifier; never a provider credential.
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Exact normalized transit matches appear before other results.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceSearchResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/geocode/reverse:
+    get:
+      tags: [Search]
+      operationId: reverseGeocode
+      summary: Resolve a coordinate to a provider-neutral place when enabled.
+      description: |
+        This endpoint is feature-gated pending Mapbox terms, attribution, storage, and
+        budget review. Request coordinates are used only for this explicit operation
+        and are not a history API.
+      parameters:
+        - { $ref: "#/components/parameters/Latitude" }
+        - { $ref: "#/components/parameters/Longitude" }
+        - name: language
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 35 }
+        - name: sessionId
+          in: query
+          description: Opaque ephemeral picker session identifier; never a provider credential.
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "200":
+          description: A normalized place result with any required attribution.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReverseGeocodeResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/journeys/plan:
+    post:
+      tags: [Journeys]
+      operationId: planJourney
+      summary: Plan a normalized A-to-B journey when the planner feature is enabled.
+      description: |
+        Provider responses are normalized before they leave the backend. Unsupported
+        preferences are disclosed in `unsupportedPreferences`; hard constraints are
+        enforced or the request returns no itineraries. The planner remains disabled
+        until the TriMet AppID and terms/rate/cache/attribution decision gate passes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JourneyPlanRequest" }
+      responses:
+        "200":
+          description: Ranked normalized itineraries, which may be empty when no option meets hard constraints.
+          headers: { X-Request-Id: { $ref: "#/components/headers/RequestId" } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JourneyPlanResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/ErrorResponse" }
+        "503": { $ref: "#/components/responses/FeatureUnavailable" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
 components:
   headers:
     RequestId:
@@ -797,6 +905,16 @@ components:
               },
           },
       }
+    FeatureUnavailable:
+      {
+        description: Requested optional feature is disabled pending its documented decision gate or is temporarily unavailable.,
+        headers: { Retry-After: { schema: { type: integer, minimum: 1 } } },
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+          },
+      }
     TemporarilyUnavailable:
       {
         description: Service cannot yet serve core data.,
@@ -875,6 +993,7 @@ components:
             conflict,
             rate_limited,
             source_unavailable,
+            feature_unavailable,
             temporarily_unavailable,
             internal_error,
           ],
@@ -1379,6 +1498,327 @@ components:
         required: [vehicle],
         properties: { vehicle: { $ref: "#/components/schemas/Vehicle" } },
       }
+    PlaceKind:
+      {
+        type: string,
+        enum:
+          [
+            stop,
+            station,
+            route,
+            vehicle,
+            address,
+            poi,
+            intersection,
+            place,
+            unknown,
+          ],
+      }
+    PlaceKinds:
+      {
+        type: string,
+        maxLength: 300,
+        pattern: "^(stop|station|route|vehicle|address|poi|intersection|place|unknown)(,(stop|station|route|vehicle|address|poi|intersection|place|unknown))*$",
+      }
+    PlaceSource:
+      {
+        type: string,
+        enum: [tabi, external, unknown],
+        description: Tabi identifies normalized transit data; external identifies a normalized approved place provider without exposing its payload.,
+      }
+    BoundingBox:
+      {
+        type: array,
+        description: "WGS84 bounding box [west, south, east, north].",
+        minItems: 4,
+        maxItems: 4,
+        items: { type: number },
+      }
+    PlaceResult:
+      type: object
+      required: [id, source, kind, name]
+      properties:
+        id:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 512,
+            description: Opaque stable result identifier within its source.,
+          }
+        source: { $ref: "#/components/schemas/PlaceSource" }
+        kind: { $ref: "#/components/schemas/PlaceKind" }
+        name: { type: string, minLength: 1, maxLength: 1000 }
+        subtitle: { type: string, maxLength: 1000 }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        bbox: { $ref: "#/components/schemas/BoundingBox" }
+        stopId: { $ref: "#/components/schemas/QualifiedId" }
+        routeId: { $ref: "#/components/schemas/QualifiedId" }
+        vehicleId: { $ref: "#/components/schemas/QualifiedId" }
+        externalReference:
+          {
+            type: string,
+            maxLength: 512,
+            description: Opaque provider reference only when terms permit returning it.,
+          }
+        attribution:
+          {
+            type: string,
+            maxLength: 2000,
+            description: "Required display attribution, when supplied by the source.",
+          }
+    PlaceSearchResponse:
+      type: object
+      required: [query, results, freshness]
+      properties:
+        query: { type: string }
+        results:
+          { type: array, items: { $ref: "#/components/schemas/PlaceResult" } }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    ReverseGeocodeResponse:
+      type: object
+      required: [result, freshness]
+      properties:
+        result: { $ref: "#/components/schemas/PlaceResult" }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    JourneyLocation:
+      oneOf:
+        - { $ref: "#/components/schemas/CoordinateJourneyLocation" }
+        - { $ref: "#/components/schemas/StopJourneyLocation" }
+        - { $ref: "#/components/schemas/PlaceJourneyLocation" }
+        - { $ref: "#/components/schemas/LocalJourneyLocation" }
+      discriminator:
+        propertyName: type
+        mapping:
+          coordinate: "#/components/schemas/CoordinateJourneyLocation"
+          stop: "#/components/schemas/StopJourneyLocation"
+          place: "#/components/schemas/PlaceJourneyLocation"
+          saved: "#/components/schemas/LocalJourneyLocation"
+          recent: "#/components/schemas/LocalJourneyLocation"
+    CoordinateJourneyLocation:
+      type: object
+      required: [type, coordinate]
+      properties:
+        type: { type: string, enum: [coordinate] }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        label: { type: string, maxLength: 500 }
+    StopJourneyLocation:
+      type: object
+      required: [type, stopId]
+      properties:
+        type: { type: string, enum: [stop] }
+        stopId: { $ref: "#/components/schemas/QualifiedId" }
+        label: { type: string, maxLength: 500 }
+    PlaceJourneyLocation:
+      type: object
+      required: [type, placeId, coordinate]
+      properties:
+        type: { type: string, enum: [place] }
+        placeId:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 512,
+            description: Opaque identifier from an immediately preceding picker response.,
+          }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        label: { type: string, maxLength: 500 }
+    LocalJourneyLocation:
+      type: object
+      required: [type, localId, coordinate]
+      properties:
+        type: { type: string, enum: [saved, recent] }
+        localId:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 255,
+            description: Device-local reference; the backend does not persist it.,
+          }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        label: { type: string, maxLength: 500 }
+    JourneyTime:
+      type: object
+      required: [mode, value]
+      properties:
+        mode: { type: string, enum: [depart_at, arrive_by] }
+        value: { $ref: "#/components/schemas/Timestamp" }
+    JourneyOptimize:
+      { type: string, enum: [fastest, fewer_transfers, least_walking] }
+    JourneyPreferenceName:
+      {
+        type: string,
+        enum:
+          [
+            modes,
+            max_transfers,
+            max_walking_meters,
+            wheelchair_accessible,
+            optimize,
+          ],
+      }
+    JourneyPreferences:
+      type: object
+      properties:
+        modes:
+          {
+            type: array,
+            minItems: 1,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/TransitMode" },
+          }
+        maxTransfers:
+          {
+            type: integer,
+            minimum: 0,
+            maximum: 6,
+            description: Hard maximum; plans exceeding it are excluded.,
+          }
+        maxWalkingMeters:
+          {
+            type: integer,
+            minimum: 0,
+            maximum: 30000,
+            description: Hard maximum; plans exceeding it are excluded.,
+          }
+        wheelchairAccessible:
+          {
+            type: boolean,
+            description: Requests sourced accessibility support; unsupported provider capability is disclosed.,
+          }
+        optimize: { $ref: "#/components/schemas/JourneyOptimize" }
+    JourneyPlanRequest:
+      type: object
+      required: [origin, destination, time]
+      properties:
+        origin: { $ref: "#/components/schemas/JourneyLocation" }
+        destination: { $ref: "#/components/schemas/JourneyLocation" }
+        time: { $ref: "#/components/schemas/JourneyTime" }
+        preferences: { $ref: "#/components/schemas/JourneyPreferences" }
+    JourneyEndpoint:
+      type: object
+      required: [type, coordinate]
+      properties:
+        type: { type: string, enum: [coordinate, stop, place, saved, recent] }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        label: { type: string, maxLength: 500 }
+        stopId: { $ref: "#/components/schemas/QualifiedId" }
+    JourneyGeometry:
+      type: object
+      required: [coordinates, isApproximate]
+      properties:
+        coordinates:
+          {
+            type: array,
+            minItems: 2,
+            items: { $ref: "#/components/schemas/Coordinate" },
+          }
+        isApproximate:
+          {
+            type: boolean,
+            description: True when geometry is not provider or GTFS shape geometry.,
+          }
+    JourneyLegType: { type: string, enum: [walk, transit, wait, transfer] }
+    JourneyLeg:
+      type: object
+      required: [type, startAt, endAt, durationSeconds, from, to]
+      properties:
+        type: { $ref: "#/components/schemas/JourneyLegType" }
+        startAt: { $ref: "#/components/schemas/Timestamp" }
+        endAt: { $ref: "#/components/schemas/Timestamp" }
+        durationSeconds: { type: integer, minimum: 0 }
+        from: { $ref: "#/components/schemas/JourneyEndpoint" }
+        to: { $ref: "#/components/schemas/JourneyEndpoint" }
+        distanceMeters: { type: integer, minimum: 0 }
+        route: { $ref: "#/components/schemas/Route" }
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+        headsign: { type: string, maxLength: 500 }
+        boardStopId: { $ref: "#/components/schemas/QualifiedId" }
+        alightStopId: { $ref: "#/components/schemas/QualifiedId" }
+        realtime: { type: boolean }
+        geometry: { $ref: "#/components/schemas/JourneyGeometry" }
+        alertIds:
+          { type: array, items: { $ref: "#/components/schemas/QualifiedId" } }
+        accessibility: { type: string, enum: [supported, unsupported, unknown] }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    UnsupportedJourneyPreference:
+      type: object
+      required: [name, reason]
+      properties:
+        name: { $ref: "#/components/schemas/JourneyPreferenceName" }
+        reason: { type: string, maxLength: 500 }
+    Itinerary:
+      type: object
+      required:
+        [
+          id,
+          departureAt,
+          arrivalAt,
+          durationSeconds,
+          transfers,
+          walkingMeters,
+          legs,
+          freshness,
+        ]
+      properties:
+        id:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 512,
+            description: Opaque itinerary identifier scoped to this response.,
+          }
+        departureAt: { $ref: "#/components/schemas/Timestamp" }
+        arrivalAt: { $ref: "#/components/schemas/Timestamp" }
+        durationSeconds: { type: integer, minimum: 0 }
+        transfers: { type: integer, minimum: 0 }
+        walkingMeters: { type: integer, minimum: 0 }
+        score: { type: number }
+        rankingReason: { type: string, maxLength: 1000 }
+        legs:
+          {
+            type: array,
+            minItems: 1,
+            items: { $ref: "#/components/schemas/JourneyLeg" },
+          }
+        alertIds:
+          { type: array, items: { $ref: "#/components/schemas/QualifiedId" } }
+        accessibility: { type: string, enum: [supported, unsupported, unknown] }
+        freshness: { $ref: "#/components/schemas/Freshness" }
+    JourneyPlanResponse:
+      type: object
+      required: [origin, destination, itineraries, source, freshness]
+      properties:
+        planId:
+          {
+            type: string,
+            maxLength: 512,
+            description: Opaque optional identifier; clients must not treat it as durable.,
+          }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+        origin: { $ref: "#/components/schemas/JourneyEndpoint" }
+        destination: { $ref: "#/components/schemas/JourneyEndpoint" }
+        itineraries:
+          { type: array, items: { $ref: "#/components/schemas/Itinerary" } }
+        appliedPreferences:
+          {
+            type: array,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/JourneyPreferenceName" },
+          }
+        unsupportedPreferences:
+          {
+            type: array,
+            items:
+              { $ref: "#/components/schemas/UnsupportedJourneyPreference" },
+          }
+        source:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 128,
+            description: Normalized planner source identifier.,
+          }
+        freshness: { $ref: "#/components/schemas/Freshness" }
     Feature:
       {
         type: object,

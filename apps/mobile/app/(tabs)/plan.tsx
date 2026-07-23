@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from "@/ui/PlaceholderScreen";
+import { PlannerView } from "@/features/planner/PlannerView";
 
 export default function PlanRoute() {
-  return <PlaceholderScreen title="Plan" />;
+  return <PlannerView />;
 }
