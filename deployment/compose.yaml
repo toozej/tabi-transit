@@ -10,6 +10,7 @@ x-backend-environment: &backend-environment
   DATABASE_NAME: ${POSTGRES_DB:-tabi}
   DATABASE_USER: ${POSTGRES_USER:-tabi}
   DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
+  TABI_DATABASE_URL_FILE: /run/secrets/database_url
   FEED_ARCHIVE_DIR: /var/lib/tabi/feed-archive
   STATIC_ARTIFACT_DIR: /var/lib/tabi/static-artifacts
 
@@ -19,6 +20,7 @@ x-backend-common: &backend-common
   environment: *backend-environment
   secrets:
     - postgres_password
+    - database_url
   depends_on:
     postgres:
       condition: service_healthy
@@ -53,10 +55,9 @@ services:
     command: ["/app/transit-api"]
     environment:
       <<: *backend-environment
-      MAPBOX_SERVER_TOKEN_FILE: /run/secrets/mapbox_server_token
     secrets:
       - postgres_password
-      - mapbox_server_token
+      - database_url
     expose: ["8080"]
     networks: [frontend, backend, egress]
     healthcheck:
@@ -75,22 +76,11 @@ services:
       TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
     secrets:
       - postgres_password
+      - database_url
       - trimet_app_id
     networks: [backend, egress]
     volumes:
       - ${TABI_FEED_ARCHIVE_DIR:-/var/lib/tabi/feed-archive}:/var/lib/tabi/feed-archive
-
-  notification-worker:
-    <<: *backend-common
-    profiles: [notifications]
-    command: ["/app/notification-worker"]
-    environment:
-      <<: *backend-environment
-      INSTALLATION_AUTH_KEY_FILE: /run/secrets/installation_auth_key
-    secrets:
-      - postgres_password
-      - installation_auth_key
-    networks: [backend, egress]
 
   postgres:
     image: ${POSTGIS_IMAGE:?set an immutable POSTGIS_IMAGE in release.env}
@@ -127,6 +117,7 @@ services:
       TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
     secrets:
       - postgres_password
+      - database_url
       - trimet_app_id
     networks: [backend, egress]
     volumes:
@@ -147,9 +138,7 @@ volumes:
 secrets:
   postgres_password:
     file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/postgres_password
+  database_url:
+    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/database_url
   trimet_app_id:
     file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/trimet_app_id
-  mapbox_server_token:
-    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/mapbox_server_token
-  installation_auth_key:
-    file: ${TABI_SECRETS_DIR:?set TABI_SECRETS_DIR to the root-owned secret directory}/installation_auth_key

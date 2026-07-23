@@ -6,7 +6,7 @@ deployment_dir=$(cd -- "$script_dir/.." && pwd)
 temporary_dir=$(mktemp -d)
 trap 'rm -rf "$temporary_dir"' EXIT
 
-for secret in postgres_password trimet_app_id mapbox_server_token installation_auth_key; do
+for secret in postgres_password database_url trimet_app_id; do
   printf 'validation-placeholder\n' > "$temporary_dir/$secret"
 done
 
@@ -22,6 +22,7 @@ TABI_BACKEND_IMAGE=ghcr.io/example/tabi-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaa
 POSTGIS_IMAGE=postgis/postgis@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 CADDY_IMAGE=caddy@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 EOF
+printf 'postgres://tabi:validation-placeholder@postgres:5432/tabi?sslmode=disable\n' > "$temporary_dir/database_url"
 
 rendered_config="$temporary_dir/compose.json"
 docker compose --env-file "$temporary_dir/env" \
@@ -43,10 +44,9 @@ jq -e '
   ([.services | to_entries[] | select(.value.networks | has("frontend")) | .key] | sort == ["api", "caddy"])
 ' "$rendered_config" >/dev/null
 
-# Least privilege: provider/installation secrets are mounted only where needed.
+# Least privilege: runtime database and provider secrets are mounted only where needed.
 jq -e '
-  (.services.api.secrets | map(.source) | sort == ["mapbox_server_token", "postgres_password"]) and
-  (.services."realtime-poller".secrets | map(.source) | sort == ["postgres_password", "trimet_app_id"]) and
-  (.services."notification-worker".secrets | map(.source) | sort == ["installation_auth_key", "postgres_password"]) and
-  (.services.migrate.secrets | map(.source) == ["postgres_password"])
+  (.services.api.secrets | map(.source) | sort == ["database_url", "postgres_password"]) and
+  (.services."realtime-poller".secrets | map(.source) | sort == ["database_url", "postgres_password", "trimet_app_id"]) and
+  (.services.migrate.secrets | map(.source) | sort == ["database_url", "postgres_password"])
 ' "$rendered_config" >/dev/null

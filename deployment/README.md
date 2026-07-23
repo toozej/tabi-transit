@@ -1,12 +1,17 @@
 # Linux Docker Compose deployment
 
-This directory implements the accepted single-host deployment shape (ADR-0004): Caddy is the only public service; API, jobs, workers, and PostGIS are private. It is a Phase 0 topology, not evidence of a deployed host or runnable backend image.
+This directory implements the accepted single-host deployment shape (ADR-0004): Caddy is the only public service; API, jobs, and PostGIS are private. It has a buildable backend runtime image, but is not evidence of a deployed host.
 
 ## Host preparation
 
 Follow [the Linux Compose runbook](../docs/implementation-plan/20_LINUX_DOCKER_COMPOSE_RUNBOOK.md). Create `/opt/tabi`, `/etc/tabi/secrets`, and the `/var/lib/tabi` bind-mount directories with the documented ownership/modes. Copy `.env.example` to `/opt/tabi/.env`, and have CI install a `0600` `release.env` containing verified immutable image digests. Do not publish PostgreSQL, metrics, admin endpoints, or the Docker socket.
 
-The backend services are still source scaffolds, so this package intentionally contains no Dockerfile and no image-build claim. `TABI_BACKEND_IMAGE` must eventually point to a non-root image, pinned by lowercase SHA-256 digest, with `/app/transit-api`, `/app/realtime-poller`, `/app/notification-worker`, `/app/gtfs-importer`, `/app/tabi-migrate`, and `/app/tabi-healthcheck`. The deployment script rejects tags and malformed digests.
+`TABI_BACKEND_IMAGE` must point to the repository's non-root, digest-pinned
+runtime image. It includes `/app/transit-api`, `/app/realtime-poller`,
+`/app/gtfs-importer`, `/app/tabi-migrate`, and `/app/tabi-healthcheck`; Compose
+selects the relevant command. Notification worker and Mapbox server workflows
+remain feature-disabled until their backend capabilities exist. The deployment
+script rejects tags and malformed digests.
 
 ## Validation
 

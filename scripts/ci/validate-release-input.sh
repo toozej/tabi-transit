@@ -15,8 +15,8 @@ if [[ ! "$image_ref" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$ ]]; then
   exit 1
 fi
 
-if [[ ! -f Dockerfile ]]; then
-  printf 'error: backend Dockerfile is not present; container build, SBOM, provenance, signing, and image release remain disabled\n' >&2
+if [[ ! -f Dockerfile || ! -f docker/healthcheck/main.go || ! -f docker/migrate/main.go ]]; then
+  printf 'error: backend image build inputs are incomplete; container release remains disabled\n' >&2
   exit 1
 fi
 

@@ -8,7 +8,6 @@ image = "ghcr.io/example/tabi-backend@sha256:REPLACE_WITH_A_VERIFIED_DIGEST"
 [processes]
 web = "/app/transit-api"
 poller = "/app/realtime-poller"
-worker = "/app/notification-worker"
 
 [http_service]
 internal_port = 8080
