@@ -87,7 +87,7 @@ export function StopView({ id }: { id: string }) {
   const schedule = useSchedule(id);
   const { saved, toggleSaved, addRecent } = useSavedStore();
   useEffect(() => {
-    if (stop.data) addRecent({ id, label: stop.data.name, kind: "stop" });
+    if (stop.data) void addRecent({ id, label: stop.data.name, kind: "stop" });
   }, [addRecent, id, stop.data]);
   const isSaved = saved.some((item) => item.id === id);
   return (
@@ -108,7 +108,7 @@ export function StopView({ id }: { id: string }) {
             <Pressable
               accessibilityRole="button"
               onPress={() =>
-                toggleSaved({ id, label: stop.data!.name, kind: "stop" })
+                void toggleSaved({ id, label: stop.data!.name, kind: "stop" })
               }
             >
               <Text>{isSaved ? "Remove saved stop" : "Save stop"}</Text>
@@ -204,12 +204,22 @@ export function AlertsView() {
   );
 }
 export function SavedView() {
-  const { saved, recents, clearRecents } = useSavedStore();
+  const { saved, recents, clearRecents, clearAllLocalData, persistence } =
+    useSavedStore();
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Text accessibilityRole="header" style={styles.heading}>
         Saved
       </Text>
+      {persistence === "loading" && (
+        <Text accessibilityLiveRegion="polite">Loading local saved data.</Text>
+      )}
+      {persistence === "unavailable" && (
+        <Text accessibilityRole="alert">
+          Device storage is unavailable. Changes are available for this session
+          only and are not presented as durable offline data.
+        </Text>
+      )}
       {saved.length === 0 ? (
         <Text>No saved stops, routes, or vehicles yet.</Text>
       ) : (
@@ -223,8 +233,14 @@ export function SavedView() {
       ) : (
         recents.map((item) => <Text key={item.id}>{item.label}</Text>)
       )}
-      <Pressable accessibilityRole="button" onPress={clearRecents}>
+      <Pressable accessibilityRole="button" onPress={() => void clearRecents()}>
         <Text>Clear recent selections</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void clearAllLocalData()}
+      >
+        <Text>Clear all saved and recent data</Text>
       </Pressable>
       <Link href="/settings/notifications" asChild>
         <Pressable accessibilityRole="link">

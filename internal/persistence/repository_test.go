@@ -1,6 +1,9 @@
 package persistence
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestValidatePublicID(t *testing.T) {
 	t.Parallel()
@@ -21,6 +24,20 @@ func TestServiceSecondsAfterMidnight(t *testing.T) {
 	seconds, err := ServiceSeconds(25, 15, 30)
 	if err != nil || seconds != 90930 {
 		t.Fatalf("got %d, %v", seconds, err)
+	}
+}
+
+func TestServiceInstantUsesAgencyTimezoneAndPreservesAfterMidnight(t *testing.T) {
+	t.Parallel()
+	zone, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Date(2026, 7, 22, 0, 0, 0, 0, zone)
+	got := serviceInstant(date, 25*3600+15*60, zone)
+	want := time.Date(2026, 7, 23, 8, 15, 0, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Fatalf("got %s want %s", got, want)
 	}
 }
 

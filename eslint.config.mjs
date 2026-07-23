@@ -22,5 +22,15 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ["apps/mobile/scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        console: "readonly",
+        process: "readonly",
+      },
+    },
+  },
   prettier,
 );

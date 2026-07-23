@@ -58,14 +58,24 @@ type CalendarException struct {
 	Date      string
 	Added     bool // true is exception_type=1; false is exception_type=2.
 }
+
+// AgencyTimezone is the IANA timezone used to turn GTFS service-day seconds
+// into instants. Multi-agency feeds are accepted only when their agencies use
+// the same timezone; a feed with different service clocks needs an explicit
+// source split before it can safely support normalized arrivals.
+type AgencyTimezone struct {
+	AgencyID string
+	Timezone string
+}
 type Feed struct {
-	Stops      []Stop
-	Routes     []Route
-	Trips      []Trip
-	StopTimes  []StopTime
-	Calendars  []Calendar
-	Exceptions []CalendarException
-	SHA256     string
+	Stops           []Stop
+	Routes          []Route
+	Trips           []Trip
+	StopTimes       []StopTime
+	Calendars       []Calendar
+	Exceptions      []CalendarException
+	AgencyTimezones []AgencyTimezone
+	SHA256          string
 }
 
 // Read validates archive topology before decoding required CSV files.
@@ -177,6 +187,21 @@ func build(t map[string][]map[string]string) (Feed, error) {
 	routes := map[string]bool{}
 	trips := map[string]bool{}
 	services := map[string]bool{}
+	var serviceTimezone string
+	for _, r := range t["agency.txt"] {
+		timezone, e := need(r, "agency_timezone", "agency")
+		if e != nil {
+			return f, e
+		}
+		if _, e = time.LoadLocation(timezone); e != nil {
+			return f, fmt.Errorf("%w: agency.agency_timezone", ErrInvalidFeed)
+		}
+		if serviceTimezone != "" && serviceTimezone != timezone {
+			return f, fmt.Errorf("%w: multiple agency timezones", ErrInvalidFeed)
+		}
+		serviceTimezone = timezone
+		f.AgencyTimezones = append(f.AgencyTimezones, AgencyTimezone{AgencyID: r["agency_id"], Timezone: timezone})
+	}
 	for _, r := range t["stops.txt"] {
 		id, e := need(r, "stop_id", "stops")
 		if e != nil {

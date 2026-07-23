@@ -51,6 +51,11 @@ type TripUpdate struct {
 	UpdatedAt                 *time.Time
 	StopTimes                 []StopTimeUpdate
 }
+type TripUpdateFeed struct {
+	SourceUpdatedAt time.Time
+	Updates         []TripUpdate
+	SHA256          string
+}
 type Alert struct {
 	EntityID, Cause, Effect  string
 	Header, Description, URL string
@@ -112,9 +117,20 @@ func ParseVehiclePositions(raw []byte, now time.Time, maxAge, futureSkew time.Du
 // ParseTripUpdates validates a complete, current-state projection. It does not
 // apply it to storage; callers must keep the last valid state on any error.
 func ParseTripUpdates(raw []byte, now time.Time, maxAge, futureSkew time.Duration) ([]TripUpdate, error) {
-	message, _, err := parseMessage(raw, now, maxAge, futureSkew)
+	feed, err := ParseTripUpdateFeed(raw, now, maxAge, futureSkew)
 	if err != nil {
 		return nil, err
+	}
+	return feed.Updates, nil
+}
+
+// ParseTripUpdateFeed retains feed-header freshness separately from per-trip
+// timestamps. Both are needed to distinguish a valid estimate from a stale
+// current-state projection.
+func ParseTripUpdateFeed(raw []byte, now time.Time, maxAge, futureSkew time.Duration) (TripUpdateFeed, error) {
+	message, updated, err := parseMessage(raw, now, maxAge, futureSkew)
+	if err != nil {
+		return TripUpdateFeed{}, err
 	}
 	seen := map[string]struct{}{}
 	updates := []TripUpdate{}
@@ -123,23 +139,23 @@ func ParseTripUpdates(raw []byte, now time.Time, maxAge, futureSkew time.Duratio
 			continue
 		}
 		if entity.GetId() == "" || entity.TripUpdate.Trip == nil || entity.TripUpdate.Trip.GetTripId() == "" {
-			return nil, fmt.Errorf("%w: incomplete trip update", ErrMalformed)
+			return TripUpdateFeed{}, fmt.Errorf("%w: incomplete trip update", ErrMalformed)
 		}
 		if _, duplicate := seen[entity.GetId()]; duplicate {
-			return nil, fmt.Errorf("%w: duplicate trip update", ErrMalformed)
+			return TripUpdateFeed{}, fmt.Errorf("%w: duplicate trip update", ErrMalformed)
 		}
 		seen[entity.GetId()] = struct{}{}
 		update := TripUpdate{EntityID: entity.GetId(), TripID: entity.TripUpdate.Trip.GetTripId(), RouteID: entity.TripUpdate.Trip.GetRouteId(), StartDate: entity.TripUpdate.Trip.GetStartDate(), ScheduleRelationship: entity.TripUpdate.Trip.GetScheduleRelationship().String()}
 		if entity.TripUpdate.Timestamp != nil {
 			value := time.Unix(int64(entity.TripUpdate.GetTimestamp()), 0).UTC()
 			if value.After(now.Add(futureSkew)) {
-				return nil, fmt.Errorf("%w: future trip update", ErrMalformed)
+				return TripUpdateFeed{}, fmt.Errorf("%w: future trip update", ErrMalformed)
 			}
 			update.UpdatedAt = &value
 		}
 		for _, stop := range entity.TripUpdate.StopTimeUpdate {
 			if stop.GetStopSequence() == 0 && stop.GetStopId() == "" {
-				return nil, fmt.Errorf("%w: trip update stop reference", ErrMalformed)
+				return TripUpdateFeed{}, fmt.Errorf("%w: trip update stop reference", ErrMalformed)
 			}
 			entry := StopTimeUpdate{StopSequence: stop.GetStopSequence(), StopID: stop.GetStopId(), ScheduleRelationship: stop.GetScheduleRelationship().String()}
 			if stop.Arrival != nil {
@@ -151,16 +167,16 @@ func ParseTripUpdates(raw []byte, now time.Time, maxAge, futureSkew time.Duratio
 				entry.DepartureTime = epochInt64Ptr(stop.Departure.Time, now, futureSkew)
 			}
 			if (stop.Arrival != nil && stop.Arrival.Time != nil && entry.ArrivalTime == nil) || (stop.Departure != nil && stop.Departure.Time != nil && entry.DepartureTime == nil) {
-				return nil, fmt.Errorf("%w: future stop update", ErrMalformed)
+				return TripUpdateFeed{}, fmt.Errorf("%w: future stop update", ErrMalformed)
 			}
 			update.StopTimes = append(update.StopTimes, entry)
 		}
 		updates = append(updates, update)
 	}
 	if len(updates) == 0 {
-		return nil, ErrEmpty
+		return TripUpdateFeed{}, ErrEmpty
 	}
-	return updates, nil
+	return TripUpdateFeed{SourceUpdatedAt: updated, Updates: updates, SHA256: digest(raw)}, nil
 }
 
 // ParseAlerts preserves only bounded rider-facing fields from current alerts.

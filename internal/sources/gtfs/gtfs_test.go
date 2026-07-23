@@ -55,6 +55,30 @@ func TestReadRejectsInvalidCalendarSemantics(t *testing.T) {
 		})
 	}
 }
+
+func TestReadRetainsValidatedAgencyTimezone(t *testing.T) {
+	t.Parallel()
+	files := valid()
+	files["agency.txt"] = "agency_id,agency_name,agency_timezone\na,Fixture Transit,America/Los_Angeles\n"
+	f, err := Read(bytes.NewReader(archive(t, files)), DefaultArchivePolicy())
+	if err != nil || len(f.AgencyTimezones) != 1 || f.AgencyTimezones[0].Timezone != "America/Los_Angeles" {
+		t.Fatalf("timezone=%#v err=%v", f.AgencyTimezones, err)
+	}
+}
+
+func TestReadRejectsInvalidOrAmbiguousAgencyTimezone(t *testing.T) {
+	t.Parallel()
+	for _, agency := range []string{
+		"agency_id,agency_name,agency_timezone\na,Fixture,Not/AZone\n",
+		"agency_id,agency_name,agency_timezone\na,Fixture,America/Los_Angeles\nb,Other,America/New_York\n",
+	} {
+		files := valid()
+		files["agency.txt"] = agency
+		if _, err := Read(bytes.NewReader(archive(t, files)), DefaultArchivePolicy()); err == nil {
+			t.Fatal("accepted unsafe agency timezone")
+		}
+	}
+}
 func TestReadRejectsMaliciousAndInvalid(t *testing.T) {
 	for n, mut := range map[string]func(map[string]string){"traversal": func(m map[string]string) { m["../stops.txt"] = m["stops.txt"]; delete(m, "stops.txt") }, "bad-reference": func(m map[string]string) { m["trips.txt"] = "route_id,service_id,trip_id\nmissing,weekday,t1\n" }, "bad-csv": func(m map[string]string) {
 		m["stops.txt"] = "stop_id,stop_name,stop_lon,stop_lat\ns1,unterminated,-1,2\n\""

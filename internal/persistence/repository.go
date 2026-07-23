@@ -216,7 +216,32 @@ type StaticImporterWriter interface {
 // upstream data must call RecordSourceFailure rather than delete current rows.
 type RealtimeWriter interface {
 	ReplaceVehicleSnapshot(ctx context.Context, snapshot VehicleSnapshot) error
+	ReplaceTripUpdateSnapshot(ctx context.Context, snapshot TripUpdateSnapshot) error
 	RecordSourceFailure(ctx context.Context, sourceID, safeCode string, attemptedAt time.Time) error
+}
+
+// TripUpdateSnapshot is a complete validated feed projection. An empty or
+// malformed provider response is never represented here, so writers can
+// safely replace current rows atomically.
+type TripUpdateSnapshot struct {
+	SourceID        string
+	SourceUpdatedAt *time.Time
+	FetchedAt       time.Time
+	ProcessedAt     time.Time
+	ContentSHA256   string
+	Updates         []TripUpdate
+}
+type TripUpdate struct {
+	EntityID, TripID, RouteID, StartDate, ScheduleRelationship string
+	UpdatedAt                                                  *time.Time
+	StopTimes                                                  []TripUpdateStopTime
+}
+type TripUpdateStopTime struct {
+	StopSequence                               int
+	StopID                                     string
+	ArrivalDelaySeconds, DepartureDelaySeconds *int32
+	ArrivalTime, DepartureTime                 *time.Time
+	ScheduleRelationship                       string
 }
 
 type VehicleSnapshot struct {

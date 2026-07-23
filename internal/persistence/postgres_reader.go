@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -173,6 +174,10 @@ func (r *PostgresReader) ListStopSchedule(ctx context.Context, filter ScheduleFi
 	if err != nil {
 		return nil, "", "", err
 	}
+	zone, err := r.serviceTimezone(ctx, filter.StopID)
+	if err != nil {
+		return nil, "", "", err
+	}
 	rows, err := r.queries.ListStopSchedule(ctx, sqlcgen.ListStopScheduleParams{StopID: filter.StopID, RouteID: filter.RouteID, DirectionID: int2(filter.DirectionID), Cursor: filter.Cursor, RowLimit: int32(filter.Limit + 1), ServiceDate: pgtype.Date{Time: date, Valid: true}})
 	if err != nil {
 		return nil, "", "", err
@@ -187,18 +192,100 @@ func (r *PostgresReader) ListStopSchedule(ctx context.Context, filter ScheduleFi
 	for _, row := range rows {
 		version = row.VersionLabel
 		seconds := int(row.ServiceDaySeconds.Int32)
-		// No agency timezone is normalized yet. Keep the authoritative service
-		// seconds and omit departureAt rather than label a UTC instant as local.
-		items = append(items, ScheduleTime{TripID: row.TripID, RouteID: row.RouteID, StopID: row.StopID, ServiceDate: filter.ServiceDate, DirectionID: int2Ptr(row.DirectionID), Headsign: row.Headsign, ServiceDaySeconds: seconds})
+		items = append(items, ScheduleTime{TripID: row.TripID, RouteID: row.RouteID, StopID: row.StopID, ServiceDate: filter.ServiceDate, DirectionID: int2Ptr(row.DirectionID), Headsign: row.Headsign, ServiceDaySeconds: seconds, DepartureAt: serviceInstant(date, seconds, zone)})
 	}
 	return items, version, next, nil
 }
 
-// ListStopArrivals deliberately remains unavailable until an agency service
-// timezone is part of normalized feed metadata. Treating UTC as service time
-// would turn valid after-midnight times into false rider-facing estimates.
-func (r *PostgresReader) ListStopArrivals(context.Context, ArrivalFilter) ([]Arrival, error) {
-	return nil, errors.New("arrival service timezone unavailable")
+func (r *PostgresReader) ListStopArrivals(ctx context.Context, filter ArrivalFilter) ([]Arrival, error) {
+	if filter.StopID == "" || filter.Minutes < 1 || filter.Minutes > 180 {
+		return nil, errors.New("invalid arrival filter")
+	}
+	zone, err := r.serviceTimezone(ctx, filter.StopID)
+	if err != nil {
+		return nil, err
+	}
+	now := filter.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	localNow := now.In(zone)
+	// Include the previous service day so 25:xx service is visible after
+	// midnight. Calendar exception checks are performed independently per day.
+	dates := []time.Time{time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, zone), time.Date(localNow.Year(), localNow.Month(), localNow.Day()-1, 0, 0, 0, 0, zone)}
+	routes := filter.RouteIDs
+	if len(routes) == 0 {
+		routes = []string{""}
+	}
+	byID := map[string]Arrival{}
+	for _, date := range dates {
+		for _, route := range routes {
+			rows, queryErr := r.queries.ListStopArrivalCandidates(ctx, sqlcgen.ListStopArrivalCandidatesParams{StopID: filter.StopID, RouteID: route, DirectionID: int2(filter.DirectionID), ServiceDate: pgtype.Date{Time: date, Valid: true}})
+			if queryErr != nil {
+				return nil, queryErr
+			}
+			for _, row := range rows {
+				scheduled := serviceInstant(date, int(row.ServiceDaySeconds.Int32), zone)
+				if scheduled.Before(now.Add(-time.Minute)) || scheduled.After(now.Add(time.Duration(filter.Minutes)*time.Minute)) {
+					continue
+				}
+				status := "scheduled"
+				relationship := strings.ToUpper(text(row.StopRelationship))
+				if relationship == "" {
+					relationship = strings.ToUpper(text(row.TripRelationship))
+				}
+				if relationship == "CANCELED" {
+					status = "cancelled"
+				} else if relationship == "SKIPPED" {
+					status = "skipped"
+				}
+				estimated := timestampPtr(row.ArrivalTime)
+				if estimated == nil {
+					estimated = timestampPtr(row.DepartureTime)
+				}
+				if estimated == nil && (row.ArrivalDelaySeconds.Valid || row.DepartureDelaySeconds.Valid) {
+					delay := row.ArrivalDelaySeconds
+					if !delay.Valid {
+						delay = row.DepartureDelaySeconds
+					}
+					value := scheduled.Add(time.Duration(delay.Int32) * time.Second)
+					estimated = &value
+				}
+				if estimated != nil && status == "scheduled" {
+					status = "estimated"
+				}
+				if !filter.IncludeScheduled && estimated == nil && status == "scheduled" {
+					continue
+				}
+				trip, sequence := row.TripID, int(row.StopSequence)
+				id := row.TripID + ":arrival:" + strconv.Itoa(sequence) + ":" + date.Format("2006-01-02")
+				byID[id] = Arrival{ID: id, StopID: row.StopID, RouteID: row.RouteID, Status: status, DirectionID: int2Ptr(row.DirectionID), Headsign: row.Headsign, ScheduledAt: scheduled, EstimatedAt: estimated, TripID: &trip, StopSequence: &sequence, Freshness: StaticFreshness{Source: "normalized-static-gtfs", ActivatedAt: now}}
+			}
+		}
+	}
+	items := make([]Arrival, 0, len(byID))
+	for _, item := range byID {
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].ScheduledAt.Before(items[j].ScheduledAt) })
+	return items, nil
+}
+
+func (r *PostgresReader) serviceTimezone(ctx context.Context, stopID string) (*time.Location, error) {
+	value, err := r.queries.StopFeedTimezone(ctx, stopID)
+	if err != nil || !value.Valid || value.String == "" {
+		return nil, errors.New("arrival service timezone unavailable")
+	}
+	zone, err := time.LoadLocation(value.String)
+	if err != nil {
+		return nil, fmt.Errorf("invalid stored service timezone: %w", err)
+	}
+	return zone, nil
+}
+
+func serviceInstant(serviceDate time.Time, seconds int, zone *time.Location) time.Time {
+	start := time.Date(serviceDate.In(zone).Year(), serviceDate.In(zone).Month(), serviceDate.In(zone).Day(), 0, 0, 0, 0, zone)
+	return start.Add(time.Duration(seconds) * time.Second).UTC()
 }
 
 func (r *PostgresReader) ListAlerts(ctx context.Context, filter AlertFilter) ([]Alert, string, error) {

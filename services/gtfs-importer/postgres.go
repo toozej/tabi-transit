@@ -58,11 +58,14 @@ func (p PostgresStore) Import(ctx context.Context, source, label, digest string,
 		}
 	} else if e == pgx.ErrNoRows {
 		report, _ := json.Marshal(map[string]int{"stops": len(f.Stops), "routes": len(f.Routes), "trips": len(f.Trips), "stop_times": len(f.StopTimes)})
-		e = tx.QueryRow(ctx, `INSERT INTO catalog.feed_versions(source_id,version_label,archive_sha256,fetched_at,import_report) VALUES($1,$2,$3,$4,$5) RETURNING id`, source, label, digest, fetched, report).Scan(&id)
+		e = tx.QueryRow(ctx, `INSERT INTO catalog.feed_versions(source_id,version_label,archive_sha256,fetched_at,import_report,service_timezone) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, source, label, digest, fetched, report, feedTimezone(f)).Scan(&id)
 		if e != nil {
 			return false, e
 		}
 	} else {
+		return false, e
+	}
+	if _, e = tx.Exec(ctx, `UPDATE catalog.feed_versions SET service_timezone=$2 WHERE id=$1`, id, feedTimezone(f)); e != nil {
 		return false, e
 	}
 	for _, s := range f.Stops {
@@ -127,6 +130,13 @@ func (p PostgresStore) Import(ctx context.Context, source, label, digest string,
 		return false, e
 	}
 	return false, tx.Commit(ctx)
+}
+
+func feedTimezone(f gtfs.Feed) any {
+	if len(f.AgencyTimezones) == 0 {
+		return nil
+	}
+	return f.AgencyTimezones[0].Timezone
 }
 func (p PostgresStore) RecordFailure(ctx context.Context, source, code string, at time.Time) error {
 	tx, e := p.DB.Begin(ctx)

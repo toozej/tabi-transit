@@ -320,6 +320,7 @@ type CatalogFeedVersion struct {
 	Status            CatalogFeedVersionStatus `json:"status"`
 	ImportReport      []byte                   `json:"import_report"`
 	CreatedAt         pgtype.Timestamptz       `json:"created_at"`
+	ServiceTimezone   pgtype.Text              `json:"service_timezone"`
 }
 
 type CatalogImportRun struct {

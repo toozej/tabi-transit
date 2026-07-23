@@ -2,12 +2,28 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 export type SqlExecutor = Pick<SQLiteDatabase, "execAsync" | "getFirstAsync">;
 
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 const CREATE_METADATA_SQL = `
   CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL
+  );
+`;
+
+const CREATE_SAVED_ITEMS_SQL = `
+  CREATE TABLE IF NOT EXISTS saved_items (
+    id TEXT PRIMARY KEY NOT NULL,
+    label TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('stop', 'route', 'vehicle', 'place', 'trip')),
+    saved_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS recent_items (
+    id TEXT PRIMARY KEY NOT NULL,
+    label TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('stop', 'route', 'vehicle', 'place', 'trip')),
+    opened_at TEXT NOT NULL,
+    position INTEGER NOT NULL UNIQUE CHECK (position >= 0)
   );
 `;
 
@@ -25,7 +41,14 @@ export async function migrateDatabase(database: SqlExecutor): Promise<void> {
 
   if (version === 0) {
     await database.execAsync(
-      `BEGIN IMMEDIATE;${CREATE_METADATA_SQL}PRAGMA user_version = 1;COMMIT;`,
+      `BEGIN IMMEDIATE;${CREATE_METADATA_SQL}${CREATE_SAVED_ITEMS_SQL}PRAGMA user_version = 2;COMMIT;`,
+    );
+    return;
+  }
+
+  if (version === 1) {
+    await database.execAsync(
+      `BEGIN IMMEDIATE;${CREATE_SAVED_ITEMS_SQL}PRAGMA user_version = 2;COMMIT;`,
     );
   }
 }

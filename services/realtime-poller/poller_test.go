@@ -16,9 +16,17 @@ import (
 )
 
 type memoryStore struct {
-	mu        sync.Mutex
-	snapshots []persistence.VehicleSnapshot
-	failures  []string
+	mu          sync.Mutex
+	snapshots   []persistence.VehicleSnapshot
+	failures    []string
+	tripUpdates []persistence.TripUpdateSnapshot
+}
+
+func (s *memoryStore) ReplaceTripUpdateSnapshot(_ context.Context, snapshot persistence.TripUpdateSnapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tripUpdates = append(s.tripUpdates, snapshot)
+	return nil
 }
 
 func (s *memoryStore) ReplaceVehicleSnapshot(_ context.Context, snapshot persistence.VehicleSnapshot) error {
@@ -89,6 +97,44 @@ func TestConfigDisabledAndAllowlisted(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTripUpdateOnlyConfigIsExplicitAndAllowlisted(t *testing.T) {
+	t.Parallel()
+	c, err := LoadConfig(func(key string) string {
+		if key == "GTFSRT_TRIP_UPDATES_ENDPOINT" {
+			return "https://fixtures.invalid/trip-updates"
+		}
+		if key == "GTFSRT_ALLOWED_HOSTS" {
+			return "fixtures.invalid"
+		}
+		return ""
+	}, func(string) ([]byte, error) { return nil, nil })
+	if err != nil || c.Endpoint != "" || c.TripUpdatesEndpoint == "" {
+		t.Fatalf("config=%#v err=%v", c, err)
+	}
+	if err := c.Validate(); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("vehicle validation %v", err)
+	}
+	if err := c.ValidateTripUpdates(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestVehicleOnlyConfigRemainsValid(t *testing.T) {
+	t.Parallel()
+	c, err := LoadConfig(func(key string) string {
+		if key == "GTFSRT_VEHICLE_ENDPOINT" {
+			return "https://fixtures.invalid/vehicles"
+		}
+		if key == "GTFSRT_ALLOWED_HOSTS" {
+			return "fixtures.invalid"
+		}
+		return ""
+	}, func(string) ([]byte, error) { return nil, nil })
+	if err != nil || c.TripUpdatesEndpoint != "" {
+		t.Fatalf("config=%#v err=%v", c, err)
+	}
+}
 func TestCancellationAndTimeoutPreserveSnapshot(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
@@ -98,5 +144,42 @@ func TestCancellationAndTimeoutPreserveSnapshot(t *testing.T) {
 	cancel()
 	if err := s.Run(ctx); err == nil || len(store.snapshots) != 0 || len(store.failures) != 1 {
 		t.Fatalf("%v %#v", err, store)
+	}
+}
+
+func TestTripUpdatesAreNormalizedAndBadPayloadPreservesCurrentState(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	valid := &gtfs.FeedMessage{
+		Header: &gtfs.FeedHeader{GtfsRealtimeVersion: ps("2.0"), Timestamp: pu(uint64(now.Unix()))},
+		Entity: []*gtfs.FeedEntity{{
+			Id: ps("tu"),
+			TripUpdate: &gtfs.TripUpdate{
+				Trip: &gtfs.TripDescriptor{TripId: ps("T"), RouteId: ps("20")},
+				StopTimeUpdate: []*gtfs.TripUpdate_StopTimeUpdate{{
+					StopSequence: proto.Uint32(1), StopId: ps("S"), Arrival: &gtfs.TripUpdate_StopTimeEvent{Delay: proto.Int32(60)},
+				}},
+			},
+		}},
+	}
+	raw, _ := proto.Marshal(valid)
+	store := &memoryStore{}
+	transport := roundTrip(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(raw)))}, nil
+	})
+	s := service(transport, store, now)
+	s.Config.TripUpdatesEndpoint = "https://fixtures.invalid/trip-updates"
+	if err := s.RunTripUpdates(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.tripUpdates) != 1 || store.tripUpdates[0].Updates[0].TripID != "trimet:trip:T" || store.tripUpdates[0].Updates[0].StopTimes[0].StopID != "trimet:stop:S" {
+		t.Fatalf("updates=%#v", store.tripUpdates)
+	}
+	bad := service(roundTrip(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("bad"))}, nil
+	}), store, now)
+	bad.Config.TripUpdatesEndpoint = "https://fixtures.invalid/trip-updates"
+	if err := bad.RunTripUpdates(context.Background()); err == nil || len(store.tripUpdates) != 1 || len(store.failures) != 1 {
+		t.Fatalf("err=%v updates=%d failures=%v", err, len(store.tripUpdates), store.failures)
 	}
 }

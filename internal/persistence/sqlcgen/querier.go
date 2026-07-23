@@ -42,10 +42,14 @@ type Querier interface {
 	ListRouteShapes(ctx context.Context, arg ListRouteShapesParams) ([]ListRouteShapesRow, error)
 	ListRouteStops(ctx context.Context, arg ListRouteStopsParams) ([]ListRouteStopsRow, error)
 	ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListRoutesRow, error)
+	// Current updates are optional enrichment. Static times are still returned
+	// when no matching valid realtime entity exists.
+	ListStopArrivalCandidates(ctx context.Context, arg ListStopArrivalCandidatesParams) ([]ListStopArrivalCandidatesRow, error)
 	// Calendar exceptions take precedence over weekday service. Service-day seconds
 	// are deliberately returned unchanged so after-midnight trips remain correct.
 	ListStopSchedule(ctx context.Context, arg ListStopScheduleParams) ([]ListStopScheduleRow, error)
 	ListStops(ctx context.Context, arg ListStopsParams) ([]ListStopsRow, error)
+	StopFeedTimezone(ctx context.Context, stopID string) (pgtype.Text, error)
 	UpsertSourceHealthSuccess(ctx context.Context, arg UpsertSourceHealthSuccessParams) error
 }
 

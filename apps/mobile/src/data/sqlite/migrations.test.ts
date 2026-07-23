@@ -24,13 +24,25 @@ describe("migrateDatabase", () => {
     expect(database.statements[0]).toContain(
       "CREATE TABLE IF NOT EXISTS metadata",
     );
-    expect(database.statements[0]).toContain("PRAGMA user_version = 1");
+    expect(database.statements[0]).toContain(
+      "CREATE TABLE IF NOT EXISTS saved_items",
+    );
+    expect(database.statements[0]).toContain("PRAGMA user_version = 2");
     expect(database.statements[0]).toContain("COMMIT");
   });
 
   it("refuses a database created by a newer application", async () => {
-    await expect(migrateDatabase(executorAt(2))).rejects.toThrow(
+    await expect(migrateDatabase(executorAt(3))).rejects.toThrow(
       "newer than this application",
     );
+  });
+
+  it("adds bounded saved and recent records to a version-one database", async () => {
+    const database = executorAt(1);
+    await migrateDatabase(database);
+    expect(database.statements[0]).toContain(
+      "CREATE TABLE IF NOT EXISTS recent_items",
+    );
+    expect(database.statements[0]).toContain("PRAGMA user_version = 2");
   });
 });

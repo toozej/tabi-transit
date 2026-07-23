@@ -225,6 +225,113 @@ func (q *Queries) ListCurrentVehicles(ctx context.Context, sourceIds []string) (
 	return items, nil
 }
 
+const listStopArrivalCandidates = `-- name: ListStopArrivalCandidates :many
+WITH active AS (
+  SELECT id, version_label FROM catalog.feed_versions WHERE status='active'
+), applicable AS (
+  SELECT s.feed_version_id, s.service_id
+  FROM transit.services s JOIN active f ON f.id=s.feed_version_id
+  LEFT JOIN transit.service_calendar_dates d ON d.feed_version_id=s.feed_version_id AND d.service_id=s.service_id AND d.service_date=$4::date
+  LEFT JOIN transit.service_calendars c ON c.feed_version_id=s.feed_version_id AND c.service_id=s.service_id
+  WHERE COALESCE(d.exception_type=1, (c.start_date <= $4::date AND c.end_date >= $4::date AND CASE EXTRACT(ISODOW FROM $4::date) WHEN 1 THEN c.monday WHEN 2 THEN c.tuesday WHEN 3 THEN c.wednesday WHEN 4 THEN c.thursday WHEN 5 THEN c.friday WHEN 6 THEN c.saturday ELSE c.sunday END))
+    AND COALESCE(d.exception_type, 0) <> 2
+), updates AS (
+ SELECT DISTINCT ON (tu.trip_public_id, su.stop_sequence) tu.trip_public_id, su.stop_sequence, tu.schedule_relationship AS trip_relationship,
+   su.arrival_delay_seconds, su.arrival_time, su.departure_delay_seconds, su.departure_time, su.schedule_relationship AS stop_relationship,
+   tu.source_id, tu.source_updated_at, tu.fetched_at, tu.processed_at
+ FROM realtime.trip_updates_current tu
+ JOIN realtime.trip_update_stop_times_current su ON su.source_id=tu.source_id AND su.entity_id=tu.entity_id
+ ORDER BY tu.trip_public_id, su.stop_sequence, tu.processed_at DESC
+)
+SELECT t.public_id AS trip_id, t.route_public_id AS route_id, st.stop_public_id AS stop_id, st.stop_sequence, t.direction_id, COALESCE(t.headsign,'') AS headsign,
+ COALESCE(st.departure_seconds, st.arrival_seconds) AS service_day_seconds, f.version_label,
+ u.trip_relationship, u.stop_relationship, u.arrival_delay_seconds, u.arrival_time, u.departure_delay_seconds, u.departure_time,
+ u.source_id AS realtime_source, u.source_updated_at, u.fetched_at AS realtime_fetched_at, u.processed_at AS realtime_processed_at
+FROM transit.stop_times st
+JOIN transit.trips t ON t.feed_version_id=st.feed_version_id AND t.public_id=st.trip_public_id
+JOIN applicable a ON a.feed_version_id=t.feed_version_id AND a.service_id=t.service_id
+JOIN active f ON f.id=t.feed_version_id
+LEFT JOIN updates u ON u.trip_public_id=t.public_id AND u.stop_sequence=st.stop_sequence
+WHERE st.stop_public_id=$1
+ AND ($2::text='' OR t.route_public_id=$2)
+ AND ($3::smallint IS NULL OR t.direction_id=$3::smallint)
+ORDER BY COALESCE(st.departure_seconds, st.arrival_seconds), t.public_id, st.stop_sequence
+`
+
+type ListStopArrivalCandidatesParams struct {
+	StopID      string      `json:"stop_id"`
+	RouteID     string      `json:"route_id"`
+	DirectionID pgtype.Int2 `json:"direction_id"`
+	ServiceDate pgtype.Date `json:"service_date"`
+}
+
+type ListStopArrivalCandidatesRow struct {
+	TripID                string             `json:"trip_id"`
+	RouteID               string             `json:"route_id"`
+	StopID                string             `json:"stop_id"`
+	StopSequence          int32              `json:"stop_sequence"`
+	DirectionID           pgtype.Int2        `json:"direction_id"`
+	Headsign              string             `json:"headsign"`
+	ServiceDaySeconds     pgtype.Int4        `json:"service_day_seconds"`
+	VersionLabel          string             `json:"version_label"`
+	TripRelationship      pgtype.Text        `json:"trip_relationship"`
+	StopRelationship      pgtype.Text        `json:"stop_relationship"`
+	ArrivalDelaySeconds   pgtype.Int4        `json:"arrival_delay_seconds"`
+	ArrivalTime           pgtype.Timestamptz `json:"arrival_time"`
+	DepartureDelaySeconds pgtype.Int4        `json:"departure_delay_seconds"`
+	DepartureTime         pgtype.Timestamptz `json:"departure_time"`
+	RealtimeSource        pgtype.Text        `json:"realtime_source"`
+	SourceUpdatedAt       pgtype.Timestamptz `json:"source_updated_at"`
+	RealtimeFetchedAt     pgtype.Timestamptz `json:"realtime_fetched_at"`
+	RealtimeProcessedAt   pgtype.Timestamptz `json:"realtime_processed_at"`
+}
+
+// Current updates are optional enrichment. Static times are still returned
+// when no matching valid realtime entity exists.
+func (q *Queries) ListStopArrivalCandidates(ctx context.Context, arg ListStopArrivalCandidatesParams) ([]ListStopArrivalCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listStopArrivalCandidates,
+		arg.StopID,
+		arg.RouteID,
+		arg.DirectionID,
+		arg.ServiceDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStopArrivalCandidatesRow{}
+	for rows.Next() {
+		var i ListStopArrivalCandidatesRow
+		if err := rows.Scan(
+			&i.TripID,
+			&i.RouteID,
+			&i.StopID,
+			&i.StopSequence,
+			&i.DirectionID,
+			&i.Headsign,
+			&i.ServiceDaySeconds,
+			&i.VersionLabel,
+			&i.TripRelationship,
+			&i.StopRelationship,
+			&i.ArrivalDelaySeconds,
+			&i.ArrivalTime,
+			&i.DepartureDelaySeconds,
+			&i.DepartureTime,
+			&i.RealtimeSource,
+			&i.SourceUpdatedAt,
+			&i.RealtimeFetchedAt,
+			&i.RealtimeProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStopSchedule = `-- name: ListStopSchedule :many
 WITH active AS (
   SELECT id, version_label FROM catalog.feed_versions WHERE status = 'active'
@@ -304,4 +411,19 @@ func (q *Queries) ListStopSchedule(ctx context.Context, arg ListStopSchedulePara
 		return nil, err
 	}
 	return items, nil
+}
+
+const stopFeedTimezone = `-- name: StopFeedTimezone :one
+SELECT f.service_timezone
+FROM transit.stops s
+JOIN catalog.feed_versions f ON f.id=s.feed_version_id
+WHERE s.public_id=$1 AND f.status='active' AND f.service_timezone IS NOT NULL
+LIMIT 1
+`
+
+func (q *Queries) StopFeedTimezone(ctx context.Context, stopID string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, stopFeedTimezone, stopID)
+	var service_timezone pgtype.Text
+	err := row.Scan(&service_timezone)
+	return service_timezone, err
 }
