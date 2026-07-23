@@ -35,3 +35,12 @@ mobile settings, a transactional delivery model, and a disabled push gateway.
 It must not request notification permission on launch, send a push, register a
 real token, or claim delivery/receipt behavior until D-017 is cleared. Policy
 defaults remain subject to D-018.
+
+## Phase 5 consequence
+
+WP-18 and the Phase 5 Streetcar/specialist-view scope are blocked by D-002 and
+D-003. No Streetcar or Rose City adapter, source fixture presented as provider
+data, deduplication policy, history/adherence screen, or public credit claim
+may be implemented or enabled until the applicable written source approval is
+recorded. The only allowed preparatory work is evidence collection and a
+source-contract review; it must not contact, fetch from, or scrape a provider.
