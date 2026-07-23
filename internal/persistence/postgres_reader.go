@@ -3,10 +3,12 @@ package persistence
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/toozej/tabi-transit/internal/persistence/sqlcgen"
 )
@@ -60,9 +62,13 @@ func (r *PostgresReader) ListCurrentVehicles(ctx context.Context, filter Vehicle
 }
 
 func (r *PostgresReader) ListNearbyStops(ctx context.Context, filter NearbyStopsFilter) ([]NearbyStop, error) {
+	wheelchair := pgtype.Bool{}
+	if filter.WheelchairAccessible != nil {
+		wheelchair = pgtype.Bool{Bool: *filter.WheelchairAccessible, Valid: true}
+	}
 	rows, err := r.queries.ListNearbyStopsPerMode(ctx, sqlcgen.ListNearbyStopsPerModeParams{
 		LimitPerMode: int64(filter.LimitPerMode), TotalLimit: filter.TotalLimit, Lon: filter.Coordinate.Longitude,
-		Lat: filter.Coordinate.Latitude, FeedVersionID: filter.FeedVersionID, RadiusMeters: float64(filter.RadiusMeters),
+		Lat: filter.Coordinate.Latitude, RadiusMeters: float64(filter.RadiusMeters), Modes: filter.Modes, WheelchairAccessible: wheelchair,
 	})
 	if err != nil {
 		return nil, err
@@ -80,6 +86,107 @@ func (r *PostgresReader) ListNearbyStops(ctx context.Context, filter NearbyStops
 		stops = append(stops, NearbyStop{ID: row.PublicID, Name: row.Name, Mode: string(row.Mode), Coordinate: Coordinate{Longitude: lon, Latitude: lat}, DistanceMeters: row.DistanceMeters})
 	}
 	return stops, nil
+}
+
+func (r *PostgresReader) GetStop(ctx context.Context, id string) (StopDetail, error) {
+	row, err := r.queries.GetCatalogStop(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StopDetail{}, ErrNotFound
+	}
+	if err != nil {
+		return StopDetail{}, err
+	}
+	routeIDs, err := stringList(row.RoutePublicIds)
+	if err != nil {
+		return StopDetail{}, err
+	}
+	stop := catalogStop(row.PublicID, row.Name, string(row.Mode), row.Longitude, row.Latitude, routeIDs, textPtr(row.ParentPublicID), row.WheelchairBoarding)
+	return StopDetail{Stop: stop, StaticFeedVersion: row.VersionLabel, Freshness: StaticFreshness{Source: "normalized-static-gtfs", ActivatedAt: timestamp(row.ActivatedAt)}}, nil
+}
+
+func (r *PostgresReader) GetRoute(ctx context.Context, id string) (RouteDetail, error) {
+	row, err := r.queries.GetCatalogRoute(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RouteDetail{}, ErrNotFound
+	}
+	if err != nil {
+		return RouteDetail{}, err
+	}
+	directions, err := r.queries.ListRouteDirections(ctx, id)
+	if err != nil {
+		return RouteDetail{}, err
+	}
+	out := make([]RouteDirection, 0, len(directions))
+	for _, d := range directions {
+		if d.DirectionID.Valid {
+			out = append(out, RouteDirection{ID: int(d.DirectionID.Int16), Headsign: d.Headsign})
+		}
+	}
+	return RouteDetail{Route: CatalogRoute{ID: row.PublicID, Mode: string(row.Mode), ShortName: text(row.ShortName), LongName: text(row.LongName), Color: stringPtr(row.Color), TextColor: stringPtr(row.TextColor)}, Directions: out, StaticFeedVersion: row.VersionLabel, Freshness: StaticFreshness{Source: "normalized-static-gtfs", ActivatedAt: timestamp(row.ActivatedAt)}}, nil
+}
+
+func (r *PostgresReader) ListRouteStops(ctx context.Context, id string, direction *int) ([]RouteStop, string, error) {
+	version, err := r.queries.LatestActiveFeedVersionLabel(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	rows, err := r.queries.ListRouteStops(ctx, sqlcgen.ListRouteStopsParams{RoutePublicID: id, DirectionID: int2(direction)})
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]RouteStop, 0, len(rows))
+	for _, row := range rows {
+		d := int2Ptr(row.DirectionID)
+		out = append(out, RouteStop{Stop: catalogStop(row.PublicID, row.Name, string(row.Mode), row.Longitude, row.Latitude, nil, textPtr(row.ParentPublicID), row.WheelchairBoarding), Sequence: int(row.StopSequence), DirectionID: d})
+	}
+	return out, version, nil
+}
+
+func (r *PostgresReader) ListRouteShapes(ctx context.Context, id string, direction *int) ([]RouteShape, string, error) {
+	version, err := r.queries.LatestActiveFeedVersionLabel(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	rows, err := r.queries.ListRouteShapes(ctx, sqlcgen.ListRouteShapesParams{RoutePublicID: id, DirectionID: int2(direction)})
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]RouteShape, 0, len(rows))
+	for _, row := range rows {
+		var geometry struct {
+			Coordinates [][]float64 `json:"coordinates"`
+		}
+		if err := json.Unmarshal([]byte(row.Geometry), &geometry); err != nil {
+			return nil, "", fmt.Errorf("route shape %s geometry: %w", row.ShapeID, err)
+		}
+		out = append(out, RouteShape{ID: row.ShapeID, RouteID: row.RoutePublicID, DirectionID: int2Ptr(row.DirectionID), Coordinates: geometry.Coordinates})
+	}
+	return out, version, nil
+}
+
+func catalogStop(id, name, mode string, longitude, latitude float64, routeIDs []string, parent *string, wheelchair int16) CatalogStop {
+	stop := CatalogStop{ID: id, Name: name, Coordinate: Coordinate{Longitude: longitude, Latitude: latitude}, Modes: []string{mode}, RouteIDs: routeIDs, ParentStopID: parent}
+	if wheelchair == 1 {
+		value := true
+		stop.WheelchairAccessible = &value
+	} else if wheelchair == 2 {
+		value := false
+		stop.WheelchairAccessible = &value
+	}
+	return stop
+}
+func int2(value *int) pgtype.Int2 {
+	if value == nil {
+		return pgtype.Int2{}
+	}
+	return pgtype.Int2{Int16: int16(*value), Valid: true}
+}
+func int2Ptr(value pgtype.Int2) *int {
+	if !value.Valid {
+		return nil
+	}
+	result := int(value.Int16)
+	return &result
 }
 
 func (r *PostgresReader) ListCatalogRoutes(ctx context.Context, filter CatalogFilter) (CatalogPage[CatalogRoute], error) {
@@ -224,3 +331,4 @@ func floatValue(value any) (float64, error) {
 
 var _ Reader = (*PostgresReader)(nil)
 var _ CatalogReader = (*PostgresReader)(nil)
+var _ RiderInfoReader = (*PostgresReader)(nil)

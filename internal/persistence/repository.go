@@ -11,6 +11,7 @@ import (
 )
 
 var ErrInvalidPublicID = errors.New("invalid source-qualified public ID")
+var ErrNotFound = errors.New("normalized record not found")
 
 type FreshnessStatus string
 
@@ -64,6 +65,35 @@ type NearbyStop struct {
 	Coordinate     Coordinate
 	DistanceMeters float64
 }
+type StaticFreshness struct {
+	Source      string
+	ActivatedAt time.Time
+}
+type StopDetail struct {
+	Stop              CatalogStop
+	StaticFeedVersion string
+	Freshness         StaticFreshness
+}
+type RouteDetail struct {
+	Route             CatalogRoute
+	Directions        []RouteDirection
+	StaticFeedVersion string
+	Freshness         StaticFreshness
+}
+type RouteDirection struct {
+	ID       int
+	Headsign string
+}
+type RouteStop struct {
+	Stop        CatalogStop
+	Sequence    int
+	DirectionID *int
+}
+type RouteShape struct {
+	ID, RouteID string
+	DirectionID *int
+	Coordinates [][]float64
+}
 
 type VehicleFilter struct{ SourceIDs []string }
 type CatalogRoute struct {
@@ -88,11 +118,12 @@ type CatalogPage[T any] struct {
 	StaticFeedVersion string
 }
 type NearbyStopsFilter struct {
-	FeedVersionID int64
-	Coordinate    Coordinate
-	RadiusMeters  int32
-	LimitPerMode  int32
-	TotalLimit    int32
+	Coordinate           Coordinate
+	RadiusMeters         int32
+	LimitPerMode         int32
+	TotalLimit           int32
+	Modes                []string
+	WheelchairAccessible *bool
 }
 
 // Reader is safe for HTTP handlers: it contains no transaction ownership and
@@ -109,6 +140,17 @@ type Reader interface {
 type CatalogReader interface {
 	ListCatalogRoutes(ctx context.Context, filter CatalogFilter) (CatalogPage[CatalogRoute], error)
 	ListCatalogStops(ctx context.Context, filter CatalogFilter) (CatalogPage[CatalogStop], error)
+}
+
+// RiderInfoReader exposes only static GTFS material that the current schema
+// can prove. Arrivals remain unavailable until normalized trip-update storage
+// and a service calendar are implemented.
+type RiderInfoReader interface {
+	ListNearbyStops(context.Context, NearbyStopsFilter) ([]NearbyStop, error)
+	GetStop(context.Context, string) (StopDetail, error)
+	GetRoute(context.Context, string) (RouteDetail, error)
+	ListRouteStops(context.Context, string, *int) ([]RouteStop, string, error)
+	ListRouteShapes(context.Context, string, *int) ([]RouteShape, string, error)
 }
 
 // StaticImporterWriter supports a staging import followed by an atomic feed

@@ -38,6 +38,91 @@ func (q *Queries) GetActiveFeedVersion(ctx context.Context, sourceID string) (Ge
 	return i, err
 }
 
+const getCatalogRoute = `-- name: GetCatalogRoute :one
+SELECT r.public_id, r.mode, r.short_name, r.long_name, COALESCE(r.color::text, '') AS color,
+       COALESCE(r.text_color::text, '') AS text_color, f.version_label, f.activated_at
+FROM transit.routes r
+JOIN catalog.feed_versions f ON f.id = r.feed_version_id AND f.status = 'active'
+WHERE r.public_id = $1
+ORDER BY f.activated_at DESC, r.public_id
+LIMIT 1
+`
+
+type GetCatalogRouteRow struct {
+	PublicID     string             `json:"public_id"`
+	Mode         TransitMode        `json:"mode"`
+	ShortName    pgtype.Text        `json:"short_name"`
+	LongName     pgtype.Text        `json:"long_name"`
+	Color        interface{}        `json:"color"`
+	TextColor    interface{}        `json:"text_color"`
+	VersionLabel string             `json:"version_label"`
+	ActivatedAt  pgtype.Timestamptz `json:"activated_at"`
+}
+
+func (q *Queries) GetCatalogRoute(ctx context.Context, publicID string) (GetCatalogRouteRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogRoute, publicID)
+	var i GetCatalogRouteRow
+	err := row.Scan(
+		&i.PublicID,
+		&i.Mode,
+		&i.ShortName,
+		&i.LongName,
+		&i.Color,
+		&i.TextColor,
+		&i.VersionLabel,
+		&i.ActivatedAt,
+	)
+	return i, err
+}
+
+const getCatalogStop = `-- name: GetCatalogStop :one
+SELECT s.public_id, s.name, s.mode, s.parent_public_id, s.wheelchair_boarding,
+       ST_X(s.point::geometry)::double precision AS longitude,
+       ST_Y(s.point::geometry)::double precision AS latitude,
+       COALESCE(jsonb_agg(DISTINCT trip.route_public_id) FILTER (WHERE trip.route_public_id IS NOT NULL), '[]'::jsonb) AS route_public_ids,
+       f.version_label, f.activated_at
+FROM transit.stops s
+JOIN catalog.feed_versions f ON f.id = s.feed_version_id AND f.status = 'active'
+LEFT JOIN transit.stop_times st ON st.feed_version_id = s.feed_version_id AND st.stop_public_id = s.public_id
+LEFT JOIN transit.trips trip ON trip.feed_version_id = st.feed_version_id AND trip.public_id = st.trip_public_id
+WHERE s.public_id = $1
+GROUP BY s.feed_version_id, s.public_id, s.name, s.mode, s.parent_public_id, s.wheelchair_boarding,
+         s.point, f.version_label, f.activated_at
+ORDER BY f.activated_at DESC, s.public_id
+LIMIT 1
+`
+
+type GetCatalogStopRow struct {
+	PublicID           string             `json:"public_id"`
+	Name               string             `json:"name"`
+	Mode               TransitMode        `json:"mode"`
+	ParentPublicID     pgtype.Text        `json:"parent_public_id"`
+	WheelchairBoarding int16              `json:"wheelchair_boarding"`
+	Longitude          float64            `json:"longitude"`
+	Latitude           float64            `json:"latitude"`
+	RoutePublicIds     interface{}        `json:"route_public_ids"`
+	VersionLabel       string             `json:"version_label"`
+	ActivatedAt        pgtype.Timestamptz `json:"activated_at"`
+}
+
+func (q *Queries) GetCatalogStop(ctx context.Context, publicID string) (GetCatalogStopRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogStop, publicID)
+	var i GetCatalogStopRow
+	err := row.Scan(
+		&i.PublicID,
+		&i.Name,
+		&i.Mode,
+		&i.ParentPublicID,
+		&i.WheelchairBoarding,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RoutePublicIds,
+		&i.VersionLabel,
+		&i.ActivatedAt,
+	)
+	return i, err
+}
+
 const getSourceHealth = `-- name: GetSourceHealth :one
 SELECT source_id, last_attempt_at, last_success_at, last_failure_at, last_source_updated_at,
        last_valid_snapshot_at, consecutive_failures, last_error_code, entity_count, updated_at
@@ -92,6 +177,155 @@ func (q *Queries) LatestActiveFeedVersionLabel(ctx context.Context) (string, err
 	var version_label string
 	err := row.Scan(&version_label)
 	return version_label, err
+}
+
+const listRouteDirections = `-- name: ListRouteDirections :many
+SELECT DISTINCT t.direction_id, COALESCE(t.headsign, '') AS headsign
+FROM transit.trips t
+JOIN catalog.feed_versions f ON f.id = t.feed_version_id AND f.status = 'active'
+WHERE t.route_public_id = $1
+  AND t.direction_id IS NOT NULL
+ORDER BY t.direction_id
+`
+
+type ListRouteDirectionsRow struct {
+	DirectionID pgtype.Int2 `json:"direction_id"`
+	Headsign    string      `json:"headsign"`
+}
+
+func (q *Queries) ListRouteDirections(ctx context.Context, routePublicID string) ([]ListRouteDirectionsRow, error) {
+	rows, err := q.db.Query(ctx, listRouteDirections, routePublicID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRouteDirectionsRow{}
+	for rows.Next() {
+		var i ListRouteDirectionsRow
+		if err := rows.Scan(&i.DirectionID, &i.Headsign); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRouteShapes = `-- name: ListRouteShapes :many
+SELECT DISTINCT sh.public_id AS shape_id, t.route_public_id, t.direction_id,
+       ST_AsGeoJSON(sh.line)::text AS geometry
+FROM transit.trips t
+JOIN catalog.feed_versions f ON f.id = t.feed_version_id AND f.status = 'active'
+JOIN transit.shapes sh ON sh.feed_version_id = t.feed_version_id AND sh.public_id = t.shape_public_id
+WHERE t.route_public_id = $1
+  AND ($2::smallint IS NULL OR t.direction_id = $2::smallint)
+ORDER BY sh.public_id, t.direction_id
+`
+
+type ListRouteShapesParams struct {
+	RoutePublicID string      `json:"route_public_id"`
+	DirectionID   pgtype.Int2 `json:"direction_id"`
+}
+
+type ListRouteShapesRow struct {
+	ShapeID       string      `json:"shape_id"`
+	RoutePublicID string      `json:"route_public_id"`
+	DirectionID   pgtype.Int2 `json:"direction_id"`
+	Geometry      string      `json:"geometry"`
+}
+
+func (q *Queries) ListRouteShapes(ctx context.Context, arg ListRouteShapesParams) ([]ListRouteShapesRow, error) {
+	rows, err := q.db.Query(ctx, listRouteShapes, arg.RoutePublicID, arg.DirectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRouteShapesRow{}
+	for rows.Next() {
+		var i ListRouteShapesRow
+		if err := rows.Scan(
+			&i.ShapeID,
+			&i.RoutePublicID,
+			&i.DirectionID,
+			&i.Geometry,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRouteStops = `-- name: ListRouteStops :many
+WITH chosen_trip AS (
+  SELECT t.feed_version_id, t.public_id, t.direction_id
+  FROM transit.trips t
+  JOIN catalog.feed_versions f ON f.id = t.feed_version_id AND f.status = 'active'
+  WHERE t.route_public_id = $1
+    AND ($2::smallint IS NULL OR t.direction_id = $2::smallint)
+  ORDER BY t.feed_version_id DESC, t.public_id
+  LIMIT 1
+)
+SELECT s.public_id, s.name, s.mode, s.parent_public_id, s.wheelchair_boarding,
+       ST_X(s.point::geometry)::double precision AS longitude,
+       ST_Y(s.point::geometry)::double precision AS latitude, st.stop_sequence,
+       chosen_trip.direction_id
+FROM chosen_trip
+JOIN transit.stop_times st ON st.feed_version_id = chosen_trip.feed_version_id AND st.trip_public_id = chosen_trip.public_id
+JOIN transit.stops s ON s.feed_version_id = st.feed_version_id AND s.public_id = st.stop_public_id
+ORDER BY st.stop_sequence
+`
+
+type ListRouteStopsParams struct {
+	RoutePublicID string      `json:"route_public_id"`
+	DirectionID   pgtype.Int2 `json:"direction_id"`
+}
+
+type ListRouteStopsRow struct {
+	PublicID           string      `json:"public_id"`
+	Name               string      `json:"name"`
+	Mode               TransitMode `json:"mode"`
+	ParentPublicID     pgtype.Text `json:"parent_public_id"`
+	WheelchairBoarding int16       `json:"wheelchair_boarding"`
+	Longitude          float64     `json:"longitude"`
+	Latitude           float64     `json:"latitude"`
+	StopSequence       int32       `json:"stop_sequence"`
+	DirectionID        pgtype.Int2 `json:"direction_id"`
+}
+
+func (q *Queries) ListRouteStops(ctx context.Context, arg ListRouteStopsParams) ([]ListRouteStopsRow, error) {
+	rows, err := q.db.Query(ctx, listRouteStops, arg.RoutePublicID, arg.DirectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRouteStopsRow{}
+	for rows.Next() {
+		var i ListRouteStopsRow
+		if err := rows.Scan(
+			&i.PublicID,
+			&i.Name,
+			&i.Mode,
+			&i.ParentPublicID,
+			&i.WheelchairBoarding,
+			&i.Longitude,
+			&i.Latitude,
+			&i.StopSequence,
+			&i.DirectionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRoutes = `-- name: ListRoutes :many

@@ -40,8 +40,9 @@ func main() {
 		defer pool.Close()
 		reader = persistence.NewPostgresReader(sqlcgen.New(pool))
 		service = application.Service{
-			Catalog:  application.PersistenceCatalog{Reader: reader},
-			Vehicles: application.PersistenceVehicleStore{Reader: reader},
+			Catalog:   application.PersistenceCatalog{Reader: reader},
+			Vehicles:  application.PersistenceVehicleStore{Reader: reader},
+			RiderInfo: application.PersistenceRiderInfo{Reader: reader},
 		}
 	}
 	options := []api.Option{}

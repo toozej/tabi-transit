@@ -49,9 +49,24 @@ type VehicleStore interface {
 	ListCurrentVehicles(context.Context, persistence.VehicleFilter) ([]persistence.Vehicle, error)
 }
 type Service struct {
-	Catalog  Catalog
-	Vehicles VehicleStore
-	Now      func() time.Time
+	Catalog   Catalog
+	Vehicles  VehicleStore
+	RiderInfo RiderInfo
+	Now       func() time.Time
+}
+
+type RiderInfo interface {
+	NearbyStops(context.Context, NearbyQuery) ([]persistence.NearbyStop, error)
+	Stop(context.Context, string) (persistence.StopDetail, error)
+	Route(context.Context, string) (persistence.RouteDetail, error)
+	RouteStops(context.Context, string, *int) ([]persistence.RouteStop, string, error)
+	RouteShapes(context.Context, string, *int) ([]persistence.RouteShape, string, error)
+}
+type NearbyQuery struct {
+	Coordinate                        persistence.Coordinate
+	RadiusMeters, LimitPerMode, Limit int
+	Modes                             []string
+	WheelchairAccessible              *bool
 }
 
 func (s Service) ListRoutes(ctx context.Context, q RouteQuery) (Page[Route], error) {
@@ -106,4 +121,34 @@ func (s Service) Vehicle(ctx context.Context, id string) (persistence.Vehicle, e
 		}
 	}
 	return persistence.Vehicle{}, errors.New("not found")
+}
+func (s Service) NearbyStops(ctx context.Context, q NearbyQuery) ([]persistence.NearbyStop, error) {
+	if s.RiderInfo == nil {
+		return nil, ErrUnavailable
+	}
+	return s.RiderInfo.NearbyStops(ctx, q)
+}
+func (s Service) Stop(ctx context.Context, id string) (persistence.StopDetail, error) {
+	if s.RiderInfo == nil {
+		return persistence.StopDetail{}, ErrUnavailable
+	}
+	return s.RiderInfo.Stop(ctx, id)
+}
+func (s Service) Route(ctx context.Context, id string) (persistence.RouteDetail, error) {
+	if s.RiderInfo == nil {
+		return persistence.RouteDetail{}, ErrUnavailable
+	}
+	return s.RiderInfo.Route(ctx, id)
+}
+func (s Service) RouteStops(ctx context.Context, id string, direction *int) ([]persistence.RouteStop, string, error) {
+	if s.RiderInfo == nil {
+		return nil, "", ErrUnavailable
+	}
+	return s.RiderInfo.RouteStops(ctx, id, direction)
+}
+func (s Service) RouteShapes(ctx context.Context, id string, direction *int) ([]persistence.RouteShape, string, error) {
+	if s.RiderInfo == nil {
+		return nil, "", ErrUnavailable
+	}
+	return s.RiderInfo.RouteShapes(ctx, id, direction)
 }

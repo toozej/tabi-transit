@@ -17,6 +17,23 @@ func (s PersistenceVehicleStore) ListCurrentVehicles(ctx context.Context, filter
 // PersistenceCatalog turns the public opaque cursor into the database keyset
 // cursor and maps persistence records into the public application model.
 type PersistenceCatalog struct{ Reader persistence.CatalogReader }
+type PersistenceRiderInfo struct{ Reader persistence.RiderInfoReader }
+
+func (s PersistenceRiderInfo) NearbyStops(ctx context.Context, q NearbyQuery) ([]persistence.NearbyStop, error) {
+	return s.Reader.ListNearbyStops(ctx, persistence.NearbyStopsFilter{Coordinate: q.Coordinate, RadiusMeters: int32(q.RadiusMeters), LimitPerMode: int32(q.LimitPerMode), TotalLimit: int32(q.Limit), Modes: q.Modes, WheelchairAccessible: q.WheelchairAccessible})
+}
+func (s PersistenceRiderInfo) Stop(ctx context.Context, id string) (persistence.StopDetail, error) {
+	return s.Reader.GetStop(ctx, id)
+}
+func (s PersistenceRiderInfo) Route(ctx context.Context, id string) (persistence.RouteDetail, error) {
+	return s.Reader.GetRoute(ctx, id)
+}
+func (s PersistenceRiderInfo) RouteStops(ctx context.Context, id string, direction *int) ([]persistence.RouteStop, string, error) {
+	return s.Reader.ListRouteStops(ctx, id, direction)
+}
+func (s PersistenceRiderInfo) RouteShapes(ctx context.Context, id string, direction *int) ([]persistence.RouteShape, string, error) {
+	return s.Reader.ListRouteShapes(ctx, id, direction)
+}
 
 func (s PersistenceCatalog) ListRoutes(ctx context.Context, q RouteQuery) (Page[Route], error) {
 	page, err := s.Reader.ListCatalogRoutes(ctx, persistence.CatalogFilter{

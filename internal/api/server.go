@@ -44,11 +44,234 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 		r.Get("/config", s.getConfig)
 		r.Get("/routes", s.routes)
 		r.Get("/stops", s.stops)
+		r.Get("/stops/nearby", s.nearbyStops)
+		r.Get("/stops/{id}", s.stop)
+		r.Get("/stops/{id}/arrivals", s.stopArrivals)
+		r.Get("/stops/{id}/schedule", s.stopSchedule)
+		r.Get("/routes/{id}", s.route)
+		r.Get("/routes/{id}/shape", s.routeShape)
+		r.Get("/routes/{id}/stops", s.routeStops)
+		r.Get("/routes/{id}/vehicles", s.routeVehicles)
 		r.Get("/vehicles", s.vehicles)
 		r.Get("/vehicles/search", s.vehicleSearch)
 		r.Get("/vehicles/{id}", s.vehicle)
 	})
 	return r
+}
+func (s *Server) nearbyStops(w http.ResponseWriter, r *http.Request) {
+	lat, lon, ok := parseCoordinate(r, w)
+	if !ok {
+		return
+	}
+	limit, ok := parseLimit(r, w)
+	if !ok {
+		return
+	}
+	modes, err := parseModes(r.URL.Query().Get("modes"))
+	if err != nil {
+		s.validation(w, r, "modes", "invalid")
+		return
+	}
+	radius, ok := boundedInt(r, w, "radiusMeters", 1000, 50, 10000)
+	if !ok {
+		return
+	}
+	perMode, ok := boundedInt(r, w, "limitPerMode", min(limit, 20), 1, 20)
+	if !ok {
+		return
+	}
+	wheelchair, ok := optionalBool(r, w, "wheelchairAccessible")
+	if !ok {
+		return
+	}
+	if _, ok := optionalBool(r, w, "includeArrivals"); !ok {
+		return
+	}
+	items, err := s.app.NearbyStops(r.Context(), application.NearbyQuery{Coordinate: persistence.Coordinate{Longitude: lon, Latitude: lat}, RadiusMeters: radius, LimitPerMode: perMode, Limit: limit, Modes: modes, WheelchairAccessible: wheelchair})
+	if err != nil {
+		s.staticUnavailable(w, r)
+		return
+	}
+	groups := map[string][]map[string]any{}
+	order := []string{}
+	for _, stop := range items {
+		if _, exists := groups[stop.Mode]; !exists {
+			order = append(order, stop.Mode)
+		}
+		groups[stop.Mode] = append(groups[stop.Mode], map[string]any{"id": stop.ID, "name": stop.Name, "coordinate": []float64{stop.Coordinate.Longitude, stop.Coordinate.Latitude}, "modes": []string{stop.Mode}, "distanceMeters": stop.DistanceMeters})
+	}
+	out := make([]map[string]any, 0, len(order))
+	for _, mode := range order {
+		out = append(out, map[string]any{"mode": mode, "stops": groups[mode]})
+	}
+	s.write(w, http.StatusOK, map[string]any{"distanceType": "straight_line", "groups": out, "freshness": staticFreshness(time.Now().UTC())})
+}
+func (s *Server) stop(w http.ResponseWriter, r *http.Request) {
+	id, ok := publicIDParam(r, w, "stop")
+	if !ok {
+		return
+	}
+	detail, err := s.app.Stop(r.Context(), id)
+	if err != nil {
+		s.staticLookupError(w, r, err, "Stop was not found.")
+		return
+	}
+	w.Header().Set("X-Static-Feed-Version", detail.StaticFeedVersion)
+	s.etag(w, r, map[string]any{"stop": stopJSON(detail.Stop), "staticFeedVersion": detail.StaticFeedVersion, "freshness": staticFreshness(detail.Freshness.ActivatedAt)})
+}
+func (s *Server) stopArrivals(w http.ResponseWriter, r *http.Request) {
+	if _, ok := publicIDParam(r, w, "stop"); !ok {
+		return
+	}
+	if _, ok := boundedInt(r, w, "minutes", 90, 1, 240); !ok {
+		return
+	}
+	if v := r.URL.Query().Get("routes"); len(v) > 2000 || hasControl(v) {
+		s.validation(w, r, "routes", "invalid")
+		return
+	}
+	if _, ok := optionalDirection(r, w); !ok {
+		return
+	}
+	if _, ok := optionalBool(r, w, "includeScheduled"); !ok {
+		return
+	}
+	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Arrivals are not available until normalized schedule and trip-update data are loaded.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-arrivals"})
+}
+func (s *Server) stopSchedule(w http.ResponseWriter, r *http.Request) {
+	if _, ok := publicIDParam(r, w, "stop"); !ok {
+		return
+	}
+	if !validServiceDate(r.URL.Query().Get("serviceDate")) {
+		s.validation(w, r, "serviceDate", "required")
+		return
+	}
+	if routeID := r.URL.Query().Get("routeId"); routeID != "" && persistence.ValidatePublicID(routeID, "route") != nil {
+		s.validation(w, r, "routeId", "invalid")
+		return
+	}
+	if _, ok := optionalDirection(r, w); !ok {
+		return
+	}
+	if _, ok := parseCommon(r, w, true); !ok {
+		return
+	}
+	s.staticUnavailable(w, r)
+}
+func (s *Server) route(w http.ResponseWriter, r *http.Request) {
+	id, ok := publicIDParam(r, w, "route")
+	if !ok {
+		return
+	}
+	if date := r.URL.Query().Get("serviceDate"); date != "" && !validServiceDate(date) {
+		s.validation(w, r, "serviceDate", "invalid")
+		return
+	}
+	detail, err := s.app.Route(r.Context(), id)
+	if err != nil {
+		s.staticLookupError(w, r, err, "Route was not found.")
+		return
+	}
+	directions := make([]map[string]any, 0, len(detail.Directions))
+	for _, d := range detail.Directions {
+		x := map[string]any{"directionId": d.ID}
+		if d.Headsign != "" {
+			x["headsign"] = d.Headsign
+		}
+		directions = append(directions, x)
+	}
+	w.Header().Set("X-Static-Feed-Version", detail.StaticFeedVersion)
+	s.etag(w, r, map[string]any{"route": routeJSON(detail.Route), "directions": directions, "staticFeedVersion": detail.StaticFeedVersion, "freshness": staticFreshness(detail.Freshness.ActivatedAt)})
+}
+func (s *Server) routeShape(w http.ResponseWriter, r *http.Request) {
+	id, ok := publicIDParam(r, w, "route")
+	if !ok {
+		return
+	}
+	direction, ok := optionalDirection(r, w)
+	if !ok {
+		return
+	}
+	if _, err := s.app.Route(r.Context(), id); err != nil {
+		s.staticLookupError(w, r, err, "Route was not found.")
+		return
+	}
+	shapes, version, err := s.app.RouteShapes(r.Context(), id, direction)
+	if err != nil {
+		s.staticUnavailable(w, r)
+		return
+	}
+	features := make([]any, 0, len(shapes))
+	for _, shape := range shapes {
+		properties := map[string]any{"shapeId": shape.ID, "routeId": shape.RouteID}
+		if shape.DirectionID != nil {
+			properties["directionId"] = *shape.DirectionID
+		}
+		features = append(features, map[string]any{"type": "Feature", "geometry": map[string]any{"type": "LineString", "coordinates": shape.Coordinates}, "properties": properties})
+	}
+	w.Header().Set("Content-Type", "application/geo+json; charset=utf-8")
+	w.Header().Set("X-Static-Feed-Version", version)
+	s.etag(w, r, map[string]any{"type": "FeatureCollection", "features": features, "staticFeedVersion": version})
+}
+func (s *Server) routeStops(w http.ResponseWriter, r *http.Request) {
+	id, ok := publicIDParam(r, w, "route")
+	if !ok {
+		return
+	}
+	if date := r.URL.Query().Get("serviceDate"); date != "" && !validServiceDate(date) {
+		s.validation(w, r, "serviceDate", "invalid")
+		return
+	}
+	direction, ok := optionalDirection(r, w)
+	if !ok {
+		return
+	}
+	if _, err := s.app.Route(r.Context(), id); err != nil {
+		s.staticLookupError(w, r, err, "Route was not found.")
+		return
+	}
+	stops, version, err := s.app.RouteStops(r.Context(), id, direction)
+	if err != nil {
+		s.staticUnavailable(w, r)
+		return
+	}
+	out := make([]any, 0, len(stops))
+	for _, stop := range stops {
+		x := stopJSON(stop.Stop)
+		x["sequence"] = stop.Sequence
+		out = append(out, x)
+	}
+	body := map[string]any{"routeId": id, "stops": out, "staticFeedVersion": version}
+	if direction != nil {
+		body["directionId"] = *direction
+	}
+	w.Header().Set("X-Static-Feed-Version", version)
+	s.etag(w, r, body)
+}
+func (s *Server) routeVehicles(w http.ResponseWriter, r *http.Request) {
+	id, ok := publicIDParam(r, w, "route")
+	if !ok {
+		return
+	}
+	if _, ok := optionalDirection(r, w); !ok {
+		return
+	}
+	if _, err := s.app.Route(r.Context(), id); err != nil {
+		s.staticLookupError(w, r, err, "Route was not found.")
+		return
+	}
+	vs, err := s.app.ListVehicles(r.Context(), nil)
+	if err != nil {
+		s.unavailable(w, r)
+		return
+	}
+	filtered := make([]persistence.Vehicle, 0, len(vs))
+	for _, v := range vs {
+		if v.RouteID != nil && *v.RouteID == id {
+			filtered = append(filtered, v)
+		}
+	}
+	s.etag(w, r, vehicleCollection(filtered, time.Now().UTC()))
 }
 
 type requestIDKey struct{}
@@ -236,8 +459,104 @@ func (s *Server) etag(w http.ResponseWriter, r *http.Request, body any) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	}
 	_, _ = w.Write(b)
+}
+func parseCoordinate(r *http.Request, w http.ResponseWriter) (float64, float64, bool) {
+	lat, e1 := strconv.ParseFloat(r.URL.Query().Get("latitude"), 64)
+	lon, e2 := strconv.ParseFloat(r.URL.Query().Get("longitude"), 64)
+	if e1 != nil || e2 != nil || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+		writeValidation(w, r, "latitude", "invalid")
+		return 0, 0, false
+	}
+	return lat, lon, true
+}
+func boundedInt(r *http.Request, w http.ResponseWriter, name string, fallback, min, max int) (int, bool) {
+	v := r.URL.Query().Get(name)
+	if v == "" {
+		return fallback, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < min || n > max {
+		(&Server{}).validation(w, r, name, "invalid")
+		return 0, false
+	}
+	return n, true
+}
+func optionalBool(r *http.Request, w http.ResponseWriter, name string) (*bool, bool) {
+	v := r.URL.Query().Get(name)
+	if v == "" {
+		return nil, true
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		(&Server{}).validation(w, r, name, "invalid")
+		return nil, false
+	}
+	return &parsed, true
+}
+func optionalDirection(r *http.Request, w http.ResponseWriter) (*int, bool) {
+	v := r.URL.Query().Get("directionId")
+	if v == "" {
+		return nil, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || (n != 0 && n != 1) {
+		(&Server{}).validation(w, r, "directionId", "invalid")
+		return nil, false
+	}
+	return &n, true
+}
+func publicIDParam(r *http.Request, w http.ResponseWriter, kind string) (string, bool) {
+	id := chi.URLParam(r, "id")
+	if persistence.ValidatePublicID(id, kind) != nil {
+		(&Server{}).validation(w, r, "id", "invalid")
+		return "", false
+	}
+	return id, true
+}
+func routeJSON(x persistence.CatalogRoute) map[string]any {
+	out := map[string]any{"id": x.ID, "mode": x.Mode, "shortName": x.ShortName, "longName": x.LongName}
+	if x.Color != nil {
+		out["color"] = *x.Color
+	}
+	if x.TextColor != nil {
+		out["textColor"] = *x.TextColor
+	}
+	return out
+}
+func stopJSON(x persistence.CatalogStop) map[string]any {
+	out := map[string]any{"id": x.ID, "name": x.Name, "coordinate": []float64{x.Coordinate.Longitude, x.Coordinate.Latitude}, "modes": x.Modes}
+	if len(x.RouteIDs) > 0 {
+		out["routeIds"] = x.RouteIDs
+	}
+	if x.ParentStopID != nil {
+		out["parentStopId"] = *x.ParentStopID
+	}
+	if x.WheelchairAccessible != nil {
+		out["wheelchairAccessible"] = *x.WheelchairAccessible
+	}
+	return out
+}
+func staticFreshness(activated time.Time) map[string]any {
+	now := time.Now().UTC()
+	if activated.IsZero() {
+		activated = now
+	}
+	return map[string]any{"source": "normalized-static-gtfs", "fetchedAt": activated.UTC().Format(time.RFC3339), "processedAt": activated.UTC().Format(time.RFC3339), "status": "fresh", "ageSeconds": int(maxDuration(0, now.Sub(activated)).Seconds()), "isRealtime": false}
+}
+func (s *Server) staticUnavailable(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Retry-After", "30")
+	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Normalized static transit data is temporarily unavailable.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-static-gtfs"})
+}
+func (s *Server) staticLookupError(w http.ResponseWriter, r *http.Request, err error, message string) {
+	if errors.Is(err, persistence.ErrNotFound) {
+		s.error(w, r, http.StatusNotFound, "not_found", message, nil)
+		return
+	}
+	s.staticUnavailable(w, r)
 }
 func (s *Server) write(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

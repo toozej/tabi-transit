@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const listNearbyStopsPerMode = `-- name: ListNearbyStopsPerMode :many
@@ -17,9 +19,13 @@ WITH input AS (
          ST_Distance(s.point, input.point)::double precision AS distance_meters,
          row_number() OVER (PARTITION BY s.mode ORDER BY s.point <-> input.point, s.public_id) AS mode_rank
   FROM transit.stops AS s
+  JOIN catalog.feed_versions f ON f.id = s.feed_version_id AND f.status = 'active'
   CROSS JOIN input
-  WHERE s.feed_version_id = $5
-    AND ST_DWithin(s.point, input.point, $6::double precision)
+  WHERE ST_DWithin(s.point, input.point, $5::double precision)
+    AND (cardinality($6::text[]) IS NULL OR s.mode::text = ANY($6::text[]))
+    AND ($7::boolean IS NULL
+      OR ($7::boolean = true AND s.wheelchair_boarding = 1)
+      OR ($7::boolean = false AND s.wheelchair_boarding <> 1))
 )
 SELECT public_id, name, mode, ST_X(point::geometry) AS longitude, ST_Y(point::geometry) AS latitude, distance_meters
 FROM nearby
@@ -29,12 +35,13 @@ LIMIT $2::integer
 `
 
 type ListNearbyStopsPerModeParams struct {
-	LimitPerMode  int64   `json:"limit_per_mode"`
-	TotalLimit    int32   `json:"total_limit"`
-	Lon           float64 `json:"lon"`
-	Lat           float64 `json:"lat"`
-	FeedVersionID int64   `json:"feed_version_id"`
-	RadiusMeters  float64 `json:"radius_meters"`
+	LimitPerMode         int64       `json:"limit_per_mode"`
+	TotalLimit           int32       `json:"total_limit"`
+	Lon                  float64     `json:"lon"`
+	Lat                  float64     `json:"lat"`
+	RadiusMeters         float64     `json:"radius_meters"`
+	Modes                []string    `json:"modes"`
+	WheelchairAccessible pgtype.Bool `json:"wheelchair_accessible"`
 }
 
 type ListNearbyStopsPerModeRow struct {
@@ -52,8 +59,9 @@ func (q *Queries) ListNearbyStopsPerMode(ctx context.Context, arg ListNearbyStop
 		arg.TotalLimit,
 		arg.Lon,
 		arg.Lat,
-		arg.FeedVersionID,
 		arg.RadiusMeters,
+		arg.Modes,
+		arg.WheelchairAccessible,
 	)
 	if err != nil {
 		return nil, err
