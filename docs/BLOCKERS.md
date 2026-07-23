@@ -43,7 +43,8 @@ Phase 4 may add validated installation/subscription contracts, fixture-only
 mobile settings, a transactional delivery model, and a disabled push gateway.
 It must not request notification permission on launch, send a push, register a
 real token, or claim delivery/receipt behavior until D-017 is cleared. Policy
-defaults remain subject to D-018.
+defaults remain subject to D-018. The local worker persistence and receipt
+state machine remain deliberately inert without an approved provider gateway.
 
 ## Phase 5 consequence
 

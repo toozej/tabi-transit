@@ -16,6 +16,8 @@ type Querier interface {
 	// the expiry predicate prevents a late time-sensitive retry.
 	ClaimNotificationDeliveries(ctx context.Context, arg ClaimNotificationDeliveriesParams) ([]ClaimNotificationDeliveriesRow, error)
 	DisablePushToken(ctx context.Context, arg DisablePushTokenParams) error
+	// The ticket predicate ensures an arbitrary receipt cannot disable a token.
+	DisableTokenForInvalidReceipt(ctx context.Context, arg DisableTokenForInvalidReceiptParams) (int64, error)
 	// Expired notifications are terminal. They must never be retried after a
 	// worker outage or a quiet-hours deferral.
 	ExpirePendingDeliveries(ctx context.Context, nowAt pgtype.Timestamptz) (int64, error)
@@ -49,6 +51,15 @@ type Querier interface {
 	// are deliberately returned unchanged so after-midnight trips remain correct.
 	ListStopSchedule(ctx context.Context, arg ListStopScheduleParams) ([]ListStopScheduleRow, error)
 	ListStops(ctx context.Context, arg ListStopsParams) ([]ListStopsRow, error)
+	MarkNotificationDeliveryExpired(ctx context.Context, arg MarkNotificationDeliveryExpiredParams) (int64, error)
+	MarkNotificationDeliveryFailed(ctx context.Context, arg MarkNotificationDeliveryFailedParams) (int64, error)
+	MarkNotificationDeliveryRetry(ctx context.Context, arg MarkNotificationDeliveryRetryParams) (int64, error)
+	// A delivery can only become sent while held by a worker. This prevents a
+	// late worker from overwriting a recovered lease or a terminal transition.
+	MarkNotificationDeliverySent(ctx context.Context, arg MarkNotificationDeliverySentParams) (int64, error)
+	// A provider receipt is tied to the ticket created by a successful send. The
+	// receipt body is constrained by the application before it reaches this query.
+	RecordNotificationReceipt(ctx context.Context, arg RecordNotificationReceiptParams) (string, error)
 	StopFeedTimezone(ctx context.Context, stopID string) (pgtype.Text, error)
 	UpsertSourceHealthSuccess(ctx context.Context, arg UpsertSourceHealthSuccessParams) error
 }

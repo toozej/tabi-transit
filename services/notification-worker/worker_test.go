@@ -19,7 +19,7 @@ func (s *fakeStore) MarkSent(_ context.Context, id, _ string, _ time.Time) error
 	s.calls = append(s.calls, "sent:"+id)
 	return nil
 }
-func (s *fakeStore) MarkRetry(_ context.Context, id string, _ time.Time, code string) error {
+func (s *fakeStore) MarkRetry(_ context.Context, id string, _ time.Time, code string, _ time.Time) error {
 	s.calls = append(s.calls, "retry:"+id+":"+code)
 	return nil
 }

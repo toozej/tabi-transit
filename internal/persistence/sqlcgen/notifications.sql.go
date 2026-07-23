@@ -128,6 +128,30 @@ func (q *Queries) DisablePushToken(ctx context.Context, arg DisablePushTokenPara
 	return err
 }
 
+const disableTokenForInvalidReceipt = `-- name: DisableTokenForInvalidReceipt :execrows
+UPDATE app.push_tokens token
+SET disabled_at = $1, disabled_reason = 'invalid_token',
+    updated_at = $1
+FROM app.notification_deliveries delivery
+WHERE delivery.provider_ticket_id = $2
+  AND delivery.push_token_id = token.id
+  AND token.disabled_at IS NULL
+`
+
+type DisableTokenForInvalidReceiptParams struct {
+	DisabledAt       pgtype.Timestamptz `json:"disabled_at"`
+	ProviderTicketID pgtype.Text        `json:"provider_ticket_id"`
+}
+
+// The ticket predicate ensures an arbitrary receipt cannot disable a token.
+func (q *Queries) DisableTokenForInvalidReceipt(ctx context.Context, arg DisableTokenForInvalidReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableTokenForInvalidReceipt, arg.DisabledAt, arg.ProviderTicketID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expirePendingDeliveries = `-- name: ExpirePendingDeliveries :execrows
 UPDATE app.notification_deliveries
 SET status = 'expired', next_attempt_at = NULL, updated_at = $1
@@ -187,4 +211,136 @@ func (q *Queries) InsertNotificationDelivery(ctx context.Context, arg InsertNoti
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const markNotificationDeliveryExpired = `-- name: MarkNotificationDeliveryExpired :execrows
+UPDATE app.notification_deliveries
+SET status = 'expired', claim_until = NULL, next_attempt_at = NULL,
+    updated_at = $1
+WHERE id = $2 AND status IN ('pending', 'retry_pending', 'sending')
+`
+
+type MarkNotificationDeliveryExpiredParams struct {
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) MarkNotificationDeliveryExpired(ctx context.Context, arg MarkNotificationDeliveryExpiredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationDeliveryExpired, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markNotificationDeliveryFailed = `-- name: MarkNotificationDeliveryFailed :execrows
+UPDATE app.notification_deliveries
+SET status = 'failed', claim_until = NULL, next_attempt_at = NULL,
+    last_error_code = $1, updated_at = $2
+WHERE id = $3 AND status = 'sending'
+`
+
+type MarkNotificationDeliveryFailedParams struct {
+	ErrorCode pgtype.Text        `json:"error_code"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) MarkNotificationDeliveryFailed(ctx context.Context, arg MarkNotificationDeliveryFailedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationDeliveryFailed, arg.ErrorCode, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markNotificationDeliveryRetry = `-- name: MarkNotificationDeliveryRetry :execrows
+UPDATE app.notification_deliveries
+SET status = 'retry_pending', next_attempt_at = $1,
+    claim_until = NULL, last_error_code = $2,
+    updated_at = $3
+WHERE id = $4 AND status = 'sending'
+`
+
+type MarkNotificationDeliveryRetryParams struct {
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	ErrorCode     pgtype.Text        `json:"error_code"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) MarkNotificationDeliveryRetry(ctx context.Context, arg MarkNotificationDeliveryRetryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationDeliveryRetry,
+		arg.NextAttemptAt,
+		arg.ErrorCode,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markNotificationDeliverySent = `-- name: MarkNotificationDeliverySent :execrows
+UPDATE app.notification_deliveries
+SET status = 'sent', provider_ticket_id = $1,
+    sent_at = $2, claim_until = NULL, next_attempt_at = NULL,
+    last_error_code = NULL, updated_at = $2
+WHERE id = $3 AND status = 'sending'
+`
+
+type MarkNotificationDeliverySentParams struct {
+	ProviderTicketID pgtype.Text        `json:"provider_ticket_id"`
+	SentAt           pgtype.Timestamptz `json:"sent_at"`
+	ID               pgtype.UUID        `json:"id"`
+}
+
+// A delivery can only become sent while held by a worker. This prevents a
+// late worker from overwriting a recovered lease or a terminal transition.
+func (q *Queries) MarkNotificationDeliverySent(ctx context.Context, arg MarkNotificationDeliverySentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationDeliverySent, arg.ProviderTicketID, arg.SentAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordNotificationReceipt = `-- name: RecordNotificationReceipt :one
+INSERT INTO app.notification_receipts (
+  provider_ticket_id, received_at, status, error_code, safe_detail, processed_at
+) VALUES (
+  $1, $2, $3,
+  $4, $5, $6
+)
+ON CONFLICT (provider_ticket_id) DO UPDATE
+SET received_at = EXCLUDED.received_at, status = EXCLUDED.status,
+    error_code = EXCLUDED.error_code, safe_detail = EXCLUDED.safe_detail,
+    processed_at = EXCLUDED.processed_at
+RETURNING provider_ticket_id
+`
+
+type RecordNotificationReceiptParams struct {
+	ProviderTicketID string             `json:"provider_ticket_id"`
+	ReceivedAt       pgtype.Timestamptz `json:"received_at"`
+	Status           string             `json:"status"`
+	ErrorCode        pgtype.Text        `json:"error_code"`
+	SafeDetail       pgtype.Text        `json:"safe_detail"`
+	ProcessedAt      pgtype.Timestamptz `json:"processed_at"`
+}
+
+// A provider receipt is tied to the ticket created by a successful send. The
+// receipt body is constrained by the application before it reaches this query.
+func (q *Queries) RecordNotificationReceipt(ctx context.Context, arg RecordNotificationReceiptParams) (string, error) {
+	row := q.db.QueryRow(ctx, recordNotificationReceipt,
+		arg.ProviderTicketID,
+		arg.ReceivedAt,
+		arg.Status,
+		arg.ErrorCode,
+		arg.SafeDetail,
+		arg.ProcessedAt,
+	)
+	var provider_ticket_id string
+	err := row.Scan(&provider_ticket_id)
+	return provider_ticket_id, err
 }
