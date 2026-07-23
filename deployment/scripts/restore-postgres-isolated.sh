@@ -9,9 +9,10 @@ fi
 
 dump_file=$(realpath -- "$1")
 [[ -r "$dump_file" && -s "$dump_file" ]] || { echo "readable non-empty dump required" >&2; exit 2; }
-pg_restore --list "$dump_file" >/dev/null
+"$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/verify-restore-candidate.sh" "$dump_file"
 
 deployment_root=${TABI_DEPLOYMENT_ROOT:-/opt/tabi}
+"$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/ops-preflight.sh" restore
 cd "$deployment_root"
 restore_project=${TABI_RESTORE_PROJECT:-tabi-restore}
 [[ $restore_project =~ ^[a-z0-9][a-z0-9_-]*$ ]] || { echo "invalid restore project name" >&2; exit 2; }

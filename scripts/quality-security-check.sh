@@ -45,9 +45,9 @@ scan_for() {
   local match
   for match in "${scan_files[@]}"; do
     if grep -nE -I -- "$expression" "$match" >/dev/null 2>&1; then
-      grep -nE -I -- "$expression" "$match" | while IFS= read -r line; do
+      while IFS= read -r line; do
         violation "$label: ${match#"$repo_root/"}:$line"
-      done
+      done < <(grep -nE -I -- "$expression" "$match")
     fi
   done
 }
@@ -63,6 +63,12 @@ scan_for "Mapbox secret token" 'sk\.[A-Za-z0-9_-]{16,}'
 # Raw location must not be emitted in application logs.  The patterns are tied
 # to logging calls, so coordinate types and GeoJSON transformations are valid.
 scan_for "raw coordinate logging" '(console\.(log|info|warn|error)|slog\.(Debug|Info|Warn|Error)|log\.(Print|Printf|Println)).*(latitude|longitude|coordinate|\blat\b|\blon\b)'
+
+# Correlation IDs and classified error codes are useful. Credentials, request
+# bodies, free-text searches, and precise location are not. Keep this check
+# deliberately tied to logging calls so ordinary configuration definitions and
+# redaction helpers remain valid.
+scan_for "sensitive value logging" '(console\.(log|info|warn|error)|slog\.(Debug|Info|Warn|Error)|log\.(Print|Printf|Println)).*(token|authorization|password|secret|app[_-]?id|search(Query|Term)?|requestBody)'
 
 compose_file="$repo_root/deployment/compose.yaml"
 if [[ -f "$compose_file" ]]; then

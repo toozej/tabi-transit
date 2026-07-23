@@ -3,6 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 deployment_root=${TABI_DEPLOYMENT_ROOT:-/opt/tabi}
+"$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/ops-preflight.sh" backup
 cd "$deployment_root"
 lock_dir=${TABI_LOCK_DIR:-/run/lock}
 exec 9>"$lock_dir/tabi-postgres-backup.lock"

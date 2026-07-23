@@ -18,4 +18,12 @@ if "$checker" "$scratch" >/dev/null 2>&1; then
   exit 1
 fi
 
+printf 'package main\nimport "log/slog"\nfunc main() { slog.Info("bad", "' > "$scratch/apps/mobile/log.go"
+printf 'token' >> "$scratch/apps/mobile/log.go"
+printf '", "value") }\n' >> "$scratch/apps/mobile/log.go"
+if "$checker" "$scratch" >/dev/null 2>&1; then
+  printf 'expected sensitive logging fixture to fail\n' >&2
+  exit 1
+fi
+
 printf 'quality/security checker tests passed\n'
