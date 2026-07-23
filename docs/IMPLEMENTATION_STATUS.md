@@ -9,6 +9,7 @@ Last updated: 2026-07-23 (Phase 1 vertical-slice implementation integrated)
 - Extracted plan: `docs/implementation-plan/`.
 - Existing approved ADRs: none found at assessment time.
 - External account, credential, legal, and host status: unknown; no status is inferred.
+- Workstation evidence decision (2026-07-23): the user has directed implementation to proceed without locally installed Android/iOS development builds or Maestro runs. Those device gates remain **unverified**, not passed, and do not authorize a production-release claim.
 
 ## Dependency board
 
@@ -56,4 +57,4 @@ WP-13 infrastructure is independently gated by the host ADR.
 
 ## Next integration milestone
 
-Phase 1 implementation and fixture QA are complete. Its required physical development-build demonstration (restricted public Mapbox token, Android and iOS devices, and Maestro) remains a blocking exit gate and cannot be claimed from this environment. Do not start Stage 6 until that gate has passed or an approved roadmap/ADR decision changes it.
+Continue non-device Phase 1 completion and Phase 2 backend/contract foundations. The physical development-build demonstration (restricted public Mapbox token, Android and iOS devices, and Maestro) is explicitly waived as a local-workstation blocker by the user, but remains unverified and required before any production-release claim.
