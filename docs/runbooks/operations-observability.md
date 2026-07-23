@@ -46,14 +46,14 @@ smoke checks before any switch.
 
 ## Alert/runbook catalog
 
-| Signal | Severity | First action |
-| --- | --- | --- |
-| `/health/ready` fails | Page | Check database, source-health, recent deploy; roll back only application image if needed. |
-| Source freshness exceeds its threshold | Ticket/Page by rider impact | Disable the source if invalid; preserve the last valid snapshot and show its freshness. |
-| Backup age/checksum fails | Page | Stop claiming recoverability; inspect dump job/disk, then verify an isolated restore. |
-| Disk, memory, or container restart trend | Ticket/Page at exhaustion risk | Preserve current/previous images and dumps; free space only under the host maintenance procedure. |
-| Caddy/TLS failure | Page | Validate DNS/certificate/container logs; never expose API, metrics, Postgres, or Docker as a workaround. |
-| Credential/billing suspicion | Page | Disable affected adapter, rotate through operator storage, and review safe logs. |
+| Signal                                   | Severity                       | First action                                                                                             |
+| ---------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `/health/ready` fails                    | Page                           | Check database, source-health, recent deploy; roll back only application image if needed.                |
+| Source freshness exceeds its threshold   | Ticket/Page by rider impact    | Disable the source if invalid; preserve the last valid snapshot and show its freshness.                  |
+| Backup age/checksum fails                | Page                           | Stop claiming recoverability; inspect dump job/disk, then verify an isolated restore.                    |
+| Disk, memory, or container restart trend | Ticket/Page at exhaustion risk | Preserve current/previous images and dumps; free space only under the host maintenance procedure.        |
+| Caddy/TLS failure                        | Page                           | Validate DNS/certificate/container logs; never expose API, metrics, Postgres, or Docker as a workaround. |
+| Credential/billing suspicion             | Page                           | Disable affected adapter, rotate through operator storage, and review safe logs.                         |
 
 ## Deferred observability profile
 
