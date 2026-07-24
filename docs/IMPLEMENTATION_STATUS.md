@@ -70,9 +70,9 @@ WP-13 infrastructure is independently gated by the host ADR.
 - Passed: TriMet Arrivals V2 adapter correction against the official documented
   host, query shape, 60-minute bound, epoch-millisecond timestamps, additive
   provider fields, and numeric opaque stop/route IDs. The opt-in credentialed
-  smoke test passed on 2026-07-24 without printing an AppID or provider body.
-  This establishes adapter compatibility only; it does not approve terms or
-  enable a production feature.
+  `make test-trimet-live` smoke test passed on 2026-07-24 without printing an
+  AppID or provider body. This establishes adapter compatibility only; it does
+  not approve terms or enable a production feature.
 
 ## Next integration milestone
 
