@@ -1,11 +1,11 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap format format-check lint typecheck test test-unit test-integration test-e2e test-race test-load generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor
+.PHONY: help bootstrap format format-check lint typecheck test test-unit test-integration test-e2e test-race test-load test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor
 GO_CACHE_DIR := $(CURDIR)/.cache/go-build
 
 help:
 	@printf '%s\n' 'Tabi developer commands:'
 	@printf '%s\n' '  bootstrap format lint typecheck test test-unit test-integration'
-	@printf '%s\n' '  test-e2e test-race test-load generate generate-check db-up db-migrate'
+	@printf '%s\n' '  test-e2e test-race test-load test-trimet-live generate generate-check db-up db-migrate'
 	@printf '%s\n' '  dev-api dev-mobile dev-poller build doctor'
 
 bootstrap:
@@ -48,6 +48,12 @@ test-load:
 	@command -v k6 >/dev/null || { echo 'k6 is required for load tests; see docs/runbooks/local-development.md'; exit 1; }
 	@test -d tests/load || { echo 'load test scripts are not present yet (WP-16)'; exit 1; }
 	@k6 run tests/load/*.js
+
+# Explicit opt-in only: sources the user's trusted local .env without printing
+# it, then performs one read-only TriMet Arrivals V2 compatibility request.
+test-trimet-live:
+	@test -f .env || { echo 'test-trimet-live requires a local .env file'; exit 1; }
+	@bash -c 'set -a; . ./.env; set +a; exec env TRIMET_LIVE_SMOKE=1 TABI_TRIMET_ENABLED=true TABI_TRIMET_BASE_URL=https://developer.trimet.org go test ./internal/sources/trimet -run TestLiveArrivalsSmoke -count=1'
 
 generate:
 	@test -f api/openapi.yaml || { echo 'OpenAPI source missing: api/openapi.yaml (WP-02)'; exit 1; }

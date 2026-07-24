@@ -34,6 +34,14 @@ The authenticated live smoke test is intentionally opt-in and uses only the
 Arrivals V2 endpoint. It reads a local secret file without printing it:
 
 ```sh
+make test-trimet-live
+```
+
+The Make target sources the trusted local `.env` file and supplies the required
+enablement and documented base URL. To run it without a `.env` file, provide
+the configuration explicitly:
+
+```sh
 TRIMET_LIVE_SMOKE=1 TRIMET_ENABLED=true \
 TRIMET_BASE_URL=https://developer.trimet.org \
 TRIMET_APP_ID_FILE=deployment/secrets/trimet_app_id \
