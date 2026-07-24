@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -11,19 +13,48 @@ import (
 // by sanitized fixtures; adding a provider field requires a fixture first.
 type arrivalsResponse struct {
 	ResultSet struct {
-		Arrival []arrivalDTO `json:"arrival"`
+		QueryTime providerTime `json:"queryTime"`
+		Arrival   []arrivalDTO `json:"arrival"`
 	} `json:"resultSet"`
 }
 type arrivalDTO struct {
-	StopID    string `json:"locid"`
-	RouteID   string `json:"route"`
-	TripID    string `json:"tripID"`
-	VehicleID string `json:"vehicleID"`
-	Headsign  string `json:"fullSign"`
-	Scheduled string `json:"scheduled"`
-	Estimated string `json:"estimated"`
-	Status    string `json:"status"`
+	StopID    string       `json:"locid"`
+	RouteID   string       `json:"route"`
+	TripID    string       `json:"tripID"`
+	VehicleID string       `json:"vehicleID"`
+	Headsign  string       `json:"fullSign"`
+	Scheduled providerTime `json:"scheduled"`
+	Estimated providerTime `json:"estimated"`
+	Status    string       `json:"status"`
 }
+
+// providerTime accepts the documented Unix epoch milliseconds used by TriMet
+// Web Services V2. RFC3339 remains accepted only for sanitized legacy
+// fixtures; provider responses are never logged when parsing fails.
+type providerTime json.RawMessage
+
+func (v *providerTime) UnmarshalJSON(data []byte) error {
+	*v = providerTime(append((*v)[:0], data...))
+	return nil
+}
+
+func (v providerTime) Time() *time.Time {
+	raw := strings.Trim(strings.TrimSpace(string(v)), `"`)
+	if raw == "" || raw == "null" {
+		return nil
+	}
+	if millis, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		parsed := time.UnixMilli(millis).UTC()
+		return &parsed
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
 type routeResponse struct {
 	ResultSet struct {
 		Route []routeDTO `json:"route"`
@@ -101,7 +132,6 @@ type legDTO struct {
 
 func decodeResponse(body io.Reader, target any) error {
 	decoder := json.NewDecoder(io.LimitReader(body, 1<<20))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
@@ -113,7 +143,7 @@ func decodeResponse(body io.Reader, target any) error {
 func mapArrivals(input arrivalsResponse) []Arrival {
 	output := make([]Arrival, 0, len(input.ResultSet.Arrival))
 	for _, v := range input.ResultSet.Arrival {
-		output = append(output, Arrival{StopID: v.StopID, RouteID: v.RouteID, TripID: v.TripID, VehicleID: v.VehicleID, Headsign: v.Headsign, ScheduledAt: parseProviderTime(v.Scheduled), EstimatedAt: parseProviderTime(v.Estimated), Status: v.Status})
+		output = append(output, Arrival{StopID: v.StopID, RouteID: v.RouteID, TripID: v.TripID, VehicleID: v.VehicleID, Headsign: v.Headsign, ScheduledAt: v.Scheduled.Time(), EstimatedAt: v.Estimated.Time(), Status: v.Status})
 	}
 	return output
 }

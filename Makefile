@@ -31,8 +31,9 @@ test: test-unit
 
 test-integration:
 	@test -f deployment/compose.yaml || { echo 'integration tests require deployment/compose.yaml (WP-13)'; exit 1; }
-	@docker compose -f deployment/compose.yaml config --quiet
 	@test -x tests/integration/run.sh || { echo 'integration test runner missing: tests/integration/run.sh'; exit 1; }
+	@# The runner renders Compose with a temporary placeholder-secret directory;
+	@# do not require developer or production secrets for deterministic tests.
 	@tests/integration/run.sh
 
 test-e2e:

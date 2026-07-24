@@ -26,7 +26,7 @@ func TestLoadConfig(t *testing.T) {
 		case "TRIMET_ENABLED":
 			return "true"
 		case "TRIMET_BASE_URL":
-			return "https://ws.trimet.org"
+			return "https://developer.trimet.org"
 		case "TRIMET_APP_ID_FILE":
 			return "/run/secrets/trimet"
 		case "TRIMET_TIMEOUT":
@@ -66,6 +66,27 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfigAcceptsRepositoryPrefixedEnvironment(t *testing.T) {
+	t.Parallel()
+	config, err := LoadConfig(func(key string) string {
+		switch key {
+		case "TABI_TRIMET_ENABLED":
+			return "true"
+		case "TABI_TRIMET_BASE_URL":
+			return "https://developer.trimet.org"
+		case "TABI_TRIMET_APP_ID":
+			return "fixture-only"
+		}
+		return ""
+	}, func(string) ([]byte, error) { return nil, os.ErrNotExist })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !config.Enabled || config.AppID != "fixture-only" || config.BaseURL != "https://developer.trimet.org" {
+		t.Fatalf("unexpected prefixed config: %#v", config)
+	}
+}
+
 func TestDisabledDoesNotCallProvider(t *testing.T) {
 	t.Parallel()
 	client, err := NewClient(Config{Timeout: time.Second}, &http.Client{}, fixedClock{})
@@ -98,6 +119,9 @@ func TestArrivalsMapsFixtureAndKeepsCredentialOutOfErrors(t *testing.T) {
 		if request.URL.Query().Get("locIDs") != "8334" {
 			t.Errorf("locIDs missing")
 		}
+		if request.URL.Query().Get("json") != "true" {
+			t.Errorf("json response was not requested")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(fixture)
 	}))
@@ -119,6 +143,32 @@ func TestArrivalsMapsFixtureAndKeepsCredentialOutOfErrors(t *testing.T) {
 	}
 	if strings.Contains(errString(err), appID) || strings.Contains(fmt.Sprint(errors.Unwrap(err)), appID) {
 		t.Fatal("AppID leaked through error")
+	}
+}
+
+func TestArrivalsAcceptsDocumentedEpochMilliseconds(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"resultSet":{"queryTime":1784737802000,"arrival":[{"locid":"8334","route":"20","scheduled":1784738100000,"estimated":1784738160000,"status":"estimated"}],"newField":"provider-compatible"}}`))
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	client, err := NewClient(Config{Enabled: true, AppID: "fixture-only", BaseURL: server.URL, AllowedHosts: []string{u.Hostname()}, Timeout: time.Second}, server.Client(), fixedClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrivals, freshness, err := client.Arrivals(context.Background(), ArrivalsRequest{StopID: "8334", Minutes: 60})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arrivals) != 1 || arrivals[0].EstimatedAt == nil || arrivals[0].EstimatedAt.UnixMilli() != 1784738160000 {
+		t.Fatalf("unexpected mapped arrivals: %#v", arrivals)
+	}
+	if freshness.SourceUpdatedAt == nil || freshness.SourceUpdatedAt.UnixMilli() != 1784737802000 {
+		t.Fatalf("unexpected source freshness: %#v", freshness)
+	}
+	if _, _, err := client.Arrivals(context.Background(), ArrivalsRequest{StopID: "8334", Minutes: 61}); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("expected minutes bound error, got %v", err)
 	}
 }
 
@@ -240,7 +290,7 @@ func TestPlannerMapsSanitizedFixtureAndConstraints(t *testing.T) {
 
 func TestPlannerRejectsUnsafeConstraints(t *testing.T) {
 	t.Parallel()
-	client, err := NewClient(Config{Enabled: true, PlannerEnabled: true, AppID: "fixture-only", BaseURL: "https://ws.trimet.org", AllowedHosts: []string{"ws.trimet.org"}, Timeout: time.Second}, nil, fixedClock{})
+	client, err := NewClient(Config{Enabled: true, PlannerEnabled: true, AppID: "fixture-only", BaseURL: "https://developer.trimet.org", AllowedHosts: []string{"developer.trimet.org"}, Timeout: time.Second}, nil, fixedClock{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,8 +303,8 @@ func TestPlannerRejectsUnsafeConstraints(t *testing.T) {
 
 func TestConfigRejectsBaseURLCredentialsOrQuery(t *testing.T) {
 	t.Parallel()
-	for _, baseURL := range []string{"https://user:pass@ws.trimet.org", "https://ws.trimet.org?unexpected=true"} {
-		if err := (Config{Enabled: true, AppID: "fixture-only", BaseURL: baseURL, AllowedHosts: []string{"ws.trimet.org"}, Timeout: time.Second}).Validate(); err == nil {
+	for _, baseURL := range []string{"https://user:pass@developer.trimet.org", "https://developer.trimet.org?unexpected=true"} {
+		if err := (Config{Enabled: true, AppID: "fixture-only", BaseURL: baseURL, AllowedHosts: []string{"developer.trimet.org"}, Timeout: time.Second}).Validate(); err == nil {
 			t.Fatalf("expected invalid base URL %q", baseURL)
 		}
 	}

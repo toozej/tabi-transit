@@ -73,35 +73,47 @@ func LoadConfig(getenv func(string) string, readFile func(string) ([]byte, error
 		return Config{}, fmt.Errorf("%w: environment and file readers are required", ErrInvalidConfig)
 	}
 	config := Config{
-		Enabled:        parseBool(getenv("TRIMET_ENABLED")),
-		PlannerEnabled: parseBool(getenv("TRIMET_PLANNER_ENABLED")),
-		BaseURL:        strings.TrimSpace(getenv("TRIMET_BASE_URL")),
-		AllowedHosts:   splitCSV(getenv("TRIMET_ALLOWED_HOSTS")),
+		Enabled:        parseBool(firstEnv(getenv, "TRIMET_ENABLED", "TABI_TRIMET_ENABLED")),
+		PlannerEnabled: parseBool(firstEnv(getenv, "TRIMET_PLANNER_ENABLED", "TABI_TRIMET_PLANNER_ENABLED")),
+		BaseURL:        strings.TrimSpace(firstEnv(getenv, "TRIMET_BASE_URL", "TABI_TRIMET_BASE_URL")),
+		AllowedHosts:   splitCSV(firstEnv(getenv, "TRIMET_ALLOWED_HOSTS", "TABI_TRIMET_ALLOWED_HOSTS")),
 		Timeout:        10 * time.Second,
 	}
-	if raw := strings.TrimSpace(getenv("TRIMET_TIMEOUT")); raw != "" {
+	if raw := strings.TrimSpace(firstEnv(getenv, "TRIMET_TIMEOUT", "TABI_TRIMET_TIMEOUT")); raw != "" {
 		value, err := time.ParseDuration(raw)
 		if err != nil || value <= 0 || value > 60*time.Second {
 			return Config{}, fmt.Errorf("%w: TRIMET_TIMEOUT must be between 0 and 60s", ErrInvalidConfig)
 		}
 		config.Timeout = value
 	}
-	if path := strings.TrimSpace(getenv("TRIMET_APP_ID_FILE")); path != "" {
+	if path := strings.TrimSpace(firstEnv(getenv, "TRIMET_APP_ID_FILE", "TABI_TRIMET_APP_ID_FILE")); path != "" {
 		contents, err := readFile(path)
 		if err != nil {
 			return Config{}, fmt.Errorf("%w: cannot read TRIMET_APP_ID_FILE", ErrInvalidConfig)
 		}
 		config.AppID = strings.TrimSpace(string(contents))
 	} else {
-		config.AppID = strings.TrimSpace(getenv("TRIMET_APP_ID"))
+		config.AppID = strings.TrimSpace(firstEnv(getenv, "TRIMET_APP_ID", "TABI_TRIMET_APP_ID"))
 	}
 	if len(config.AllowedHosts) == 0 {
-		config.AllowedHosts = []string{"ws.trimet.org"}
+		config.AllowedHosts = []string{"developer.trimet.org"}
 	}
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}
 	return config, nil
+}
+
+// firstEnv supports the repository-wide TABI_* configuration convention while
+// retaining the unprefixed names injected by the production Compose service.
+// The first non-empty value wins so callers can override local defaults.
+func firstEnv(getenv func(string) string, names ...string) string {
+	for _, name := range names {
+		if value := getenv(name); strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (c Config) Validate() error {
@@ -250,14 +262,15 @@ func (c *Client) Arrivals(ctx context.Context, request ArrivalsRequest) ([]Arriv
 	if err := validateID(request.StopID); err != nil {
 		return nil, Freshness{}, err
 	}
-	if request.Minutes < 0 || request.Minutes > 180 {
-		return nil, Freshness{}, invalidRequest("minutes must be between 0 and 180")
+	if request.Minutes < 0 || request.Minutes > 60 {
+		return nil, Freshness{}, invalidRequest("minutes must be between 0 and 60")
 	}
 	var response arrivalsResponse
-	freshness, err := c.get(ctx, "/ws/v2/arrivals", url.Values{"locIDs": {request.StopID}, "minutes": {strconv.Itoa(request.Minutes)}}, &response)
+	freshness, err := c.get(ctx, "/ws/v2/arrivals", url.Values{"locIDs": {request.StopID}, "minutes": {strconv.Itoa(request.Minutes)}, "json": {"true"}}, &response)
 	if err != nil {
 		return nil, Freshness{}, err
 	}
+	freshness.SourceUpdatedAt = response.ResultSet.QueryTime.Time()
 	return mapArrivals(response), freshness, nil
 }
 func (c *Client) Route(ctx context.Context, id string) (Route, Freshness, error) {
@@ -332,8 +345,8 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, target 
 	}
 	u, _ := url.Parse(c.config.BaseURL)
 	u.Path = strings.TrimRight(u.Path, "/") + path
+	query.Set("appID", c.config.AppID)
 	u.RawQuery = query.Encode()
-	u.RawQuery += "&appID=" + url.QueryEscape(c.config.AppID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return Freshness{}, &Error{Kind: ErrorInvalid, Err: errors.New("request construction failed")}
