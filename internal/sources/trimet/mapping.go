@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,8 +19,8 @@ type arrivalsResponse struct {
 	} `json:"resultSet"`
 }
 type arrivalDTO struct {
-	StopID    string       `json:"locid"`
-	RouteID   string       `json:"route"`
+	StopID    providerID   `json:"locid"`
+	RouteID   providerID   `json:"route"`
 	TripID    string       `json:"tripID"`
 	VehicleID string       `json:"vehicleID"`
 	Headsign  string       `json:"fullSign"`
@@ -32,6 +33,34 @@ type arrivalDTO struct {
 // Web Services V2. RFC3339 remains accepted only for sanitized legacy
 // fixtures; provider responses are never logged when parsing fails.
 type providerTime json.RawMessage
+
+// providerID accepts the string and integer JSON representations emitted by
+// TriMet. IDs remain opaque strings at the adapter boundary; fractions,
+// booleans, objects, and arrays are rejected as absent rather than coerced.
+type providerID json.RawMessage
+
+func (v *providerID) UnmarshalJSON(data []byte) error {
+	*v = providerID(append((*v)[:0], data...))
+	return nil
+}
+
+func (v providerID) String() string {
+	raw := strings.TrimSpace(string(v))
+	if raw == "" || raw == "null" {
+		return ""
+	}
+	if strings.HasPrefix(raw, `"`) {
+		var value string
+		if json.Unmarshal(v, &value) == nil {
+			return value
+		}
+		return ""
+	}
+	if _, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		return raw
+	}
+	return ""
+}
 
 func (v *providerTime) UnmarshalJSON(data []byte) error {
 	*v = providerTime(append((*v)[:0], data...))
@@ -140,10 +169,79 @@ func decodeResponse(body io.Reader, target any) error {
 	}
 	return nil
 }
+
+// responseJSONShape returns only JSON object field names and value kinds for
+// an opt-in smoke diagnostic. It must never include provider response values.
+func responseJSONShape(body []byte) string {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(body, &root); err != nil {
+		return "json=invalid"
+	}
+	parts := []string{"json=object", "root_keys=" + strings.Join(sortedJSONKeys(root), ",")}
+	if resultSet, ok := root["resultSet"]; ok {
+		var result map[string]json.RawMessage
+		if err := json.Unmarshal(resultSet, &result); err != nil {
+			parts = append(parts, "resultSet=non_object")
+		} else {
+			parts = append(parts, "resultSet_keys="+strings.Join(sortedJSONKeys(result), ","))
+			if arrivals, ok := result["arrival"]; ok {
+				parts = append(parts, firstObjectFieldTypes("arrival", arrivals))
+			}
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func firstObjectFieldTypes(name string, raw json.RawMessage) string {
+	var values []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil || len(values) == 0 {
+		return name + "=not_nonempty_array"
+	}
+	keys := sortedJSONKeys(values[0])
+	if len(keys) > 32 {
+		keys = keys[:32]
+	}
+	types := make([]string, 0, len(keys))
+	for _, key := range keys {
+		types = append(types, key+":"+jsonValueKind(values[0][key]))
+	}
+	return name + "_first_types=" + strings.Join(types, ",")
+}
+
+func jsonValueKind(raw json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(raw))
+	switch {
+	case trimmed == "null":
+		return "null"
+	case strings.HasPrefix(trimmed, `"`):
+		return "string"
+	case strings.HasPrefix(trimmed, "{"):
+		return "object"
+	case strings.HasPrefix(trimmed, "["):
+		return "array"
+	case trimmed == "true" || trimmed == "false":
+		return "boolean"
+	default:
+		return "number_or_unknown"
+	}
+}
+
+func sortedJSONKeys(values map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		// Field names are bounded in the diagnostic to avoid copying attacker-
+		// controlled response data into logs.
+		if len(key) <= 64 {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
 func mapArrivals(input arrivalsResponse) []Arrival {
 	output := make([]Arrival, 0, len(input.ResultSet.Arrival))
 	for _, v := range input.ResultSet.Arrival {
-		output = append(output, Arrival{StopID: v.StopID, RouteID: v.RouteID, TripID: v.TripID, VehicleID: v.VehicleID, Headsign: v.Headsign, ScheduledAt: v.Scheduled.Time(), EstimatedAt: v.Estimated.Time(), Status: v.Status})
+		output = append(output, Arrival{StopID: v.StopID.String(), RouteID: v.RouteID.String(), TripID: v.TripID, VehicleID: v.VehicleID, Headsign: v.Headsign, ScheduledAt: v.Scheduled.Time(), EstimatedAt: v.Estimated.Time(), Status: v.Status})
 	}
 	return output
 }

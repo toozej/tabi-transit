@@ -3,6 +3,7 @@
 package trimet
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -38,6 +39,10 @@ type Error struct {
 	Kind       ErrorKind
 	StatusCode int
 	Err        error
+	// diagnostic is intentionally limited to response metadata and JSON field
+	// names. It is used by the opt-in live smoke test only; Error never renders
+	// it, so provider data and credentials cannot leak through normal callers.
+	diagnostic string
 }
 
 func (e *Error) Error() string {
@@ -47,6 +52,8 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("TriMet Web Services %s", e.Kind)
 }
 func (e *Error) Unwrap() error { return e.Err }
+
+func (e *Error) smokeDiagnostic() string { return e.diagnostic }
 
 // IsSourceUnavailable tells callers whether to map this to the API's safe
 // source_unavailable response. Disabled is deliberately separate: it is a
@@ -363,13 +370,28 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, target 
 		io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 		return Freshness{}, &Error{Kind: ErrorUnavailable, StatusCode: response.StatusCode}
 	}
-	if err := decodeResponse(response.Body, target); err != nil {
+	body, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil {
+		return Freshness{}, &Error{Kind: ErrorUnavailable, StatusCode: response.StatusCode, Err: errors.New("response read failed")}
+	}
+	if len(body) > 1<<20 {
+		return Freshness{}, &Error{Kind: ErrorMalformed, StatusCode: response.StatusCode, Err: errors.New("response exceeds size limit"), diagnostic: responseDiagnostic(response, body, "body_exceeds_limit")}
+	}
+	if err := decodeResponse(bytes.NewReader(body), target); err != nil {
 		// Do not retain a decoder error, as it can reflect provider response
 		// content. Application callers only receive a safe classification.
-		return Freshness{}, &Error{Kind: ErrorMalformed, Err: errors.New("response decode failed")}
+		return Freshness{}, &Error{Kind: ErrorMalformed, StatusCode: response.StatusCode, Err: errors.New("response decode failed"), diagnostic: responseDiagnostic(response, body, "decode_failed")}
 	}
 	now := c.clock.Now().UTC()
 	return Freshness{Source: SourceID, FetchedAt: now, ProcessedAt: now, IsRealtime: true}, nil
+}
+
+func responseDiagnostic(response *http.Response, body []byte, reason string) string {
+	contentType := strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0])
+	if contentType == "" {
+		contentType = "unknown"
+	}
+	return fmt.Sprintf("reason=%s status=%d content_type=%q bytes=%d %s", reason, response.StatusCode, contentType, len(body), responseJSONShape(body))
 }
 
 func invalidRequest(message string) error {

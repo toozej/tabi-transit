@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-07-23 (TriMet Arrivals V2 boundary correction integrated; live smoke remains environment-gated)
+Last updated: 2026-07-24 (TriMet Arrivals V2 live smoke passes; production enablement remains terms-gated)
 
 ## Repository baseline
 
@@ -36,11 +36,11 @@ WP-13 infrastructure is independently gated by the host ADR.
 | Completed                  | WP-15 non-host operations, WP-17 security/privacy guardrails                                                                            | Host/backup/metrics and legal evidence remain unverified.                                                                                                                                                                                        |
 | Completed / evidence-gated | WP-12 Notifications                                                                                                                     | Contract, fixture-only mobile settings, encrypted-token persistence, leased PostgreSQL delivery/receipt state, and a disabled worker are integrated. Real permission, token registration, provider delivery, and receipts remain evidence-gated. |
 | Blocked / evidence-gated   | WP-18                                                                                                                                   | Phase 5 is stopped at D-002/D-003: no canonical source, written rights, terms, or approval is recorded for Streetcar or Rose City.                                                                                                               |
-| Blocked / evidence-gated   | WP-06 production TriMet access, optional sources, production-host deployment, physical RNMapbox proof, mobile RNTL/Vitest harness proof | The documented Arrivals V2 boundary is fixture-tested and accepts `TABI_TRIMET_*` local configuration, but this workspace could not open the opaque AppID file for the opt-in smoke test. Do not scrape.                                         |
+| Blocked / evidence-gated   | WP-06 production TriMet access, optional sources, production-host deployment, physical RNMapbox proof, mobile RNTL/Vitest harness proof | The documented Arrivals V2 boundary is fixture- and local smoke-tested with `TABI_TRIMET_*` configuration. Production enablement remains gated on terms/rate/cache/attribution/planner evidence. Do not scrape.                                  |
 
 ## Decisions awaiting evidence
 
-- D-001 TriMet terms, rate/cache/attribution requirements, and successful opaque-secret live smoke.
+- D-001 TriMet terms, rate/cache/attribution requirements, and an explicit production feature-enable decision.
 - D-002/D-003 Streetcar and Rose City source rights; both remain disabled.
 - D-004 Mapbox Search/Geocoding terms, tokens, budgets, and storage rules.
 - D-010 Expo/RNMapbox/native SDK compatibility on physical builds.
@@ -68,11 +68,11 @@ WP-13 infrastructure is independently gated by the host ADR.
 - Passed: OpenAPI lint, structural validation, and generated-client drift checks complete without warnings.
 - Passed in the approved network environment: pinned sqlc v1.30.0 generation and `go test ./...`; ordinary sandbox `make generate` cannot reach `proxy.golang.org` and is an environment network gate, not a generated-code drift failure.
 - Passed: TriMet Arrivals V2 adapter correction against the official documented
-  host, query shape, 60-minute bound, epoch-millisecond timestamps, and
-  additive provider fields; local unit suite passes. Not passed: the explicit
-  credentialed smoke test could not open the uninspected local secret file in
-  this workspace, so it made no provider request and did not establish live
-  source access or terms approval.
+  host, query shape, 60-minute bound, epoch-millisecond timestamps, additive
+  provider fields, and numeric opaque stop/route IDs. The opt-in credentialed
+  smoke test passed on 2026-07-24 without printing an AppID or provider body.
+  This establishes adapter compatibility only; it does not approve terms or
+  enable a production feature.
 
 ## Next integration milestone
 

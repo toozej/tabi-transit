@@ -2,6 +2,7 @@ package trimet
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -26,6 +27,10 @@ func TestLiveArrivalsSmoke(t *testing.T) {
 	defer cancel()
 	arrivals, freshness, err := client.Arrivals(ctx, ArrivalsRequest{StopID: "8334", Minutes: 5})
 	if err != nil {
+		var sourceErr *Error
+		if errors.As(err, &sourceErr) && sourceErr.smokeDiagnostic() != "" {
+			t.Logf("safe TriMet response diagnostic: %s", sourceErr.smokeDiagnostic())
+		}
 		t.Fatalf("TriMet Arrivals V2 smoke request: %v", err)
 	}
 	if freshness.Source != SourceID || freshness.FetchedAt.IsZero() || !freshness.IsRealtime {

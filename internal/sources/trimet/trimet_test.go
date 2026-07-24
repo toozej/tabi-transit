@@ -172,6 +172,16 @@ func TestArrivalsAcceptsDocumentedEpochMilliseconds(t *testing.T) {
 	}
 }
 
+func TestArrivalsNormalizesNumericProviderIDs(t *testing.T) {
+	t.Parallel()
+	input := arrivalsResponse{}
+	input.ResultSet.Arrival = []arrivalDTO{{StopID: providerID(`8334`), RouteID: providerID(`20`)}}
+	arrivals := mapArrivals(input)
+	if len(arrivals) != 1 || arrivals[0].StopID != "8334" || arrivals[0].RouteID != "20" {
+		t.Fatalf("unexpected numeric ID normalization: %#v", arrivals)
+	}
+}
+
 func TestClassifiesProviderFailuresWithoutBodyLeakage(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
