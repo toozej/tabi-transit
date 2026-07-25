@@ -10,15 +10,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "tabi",
   scheme: "tabi",
   version: "0.0.0",
+  icon: "./assets/images/tabi-app-icon.png",
   orientation: "portrait",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
     bundleIdentifier: "app.tabi.transit",
     supportsTablet: true,
+    icon: "./assets/images/tabi-app-icon.png",
   },
   android: {
     package: "app.tabi.transit",
+    adaptiveIcon: {
+      foregroundImage: "./assets/images/tabi-app-icon.png",
+      backgroundColor: "#16191F",
+    },
+  },
+  web: {
+    favicon: "./assets/images/tabi-app-icon.png",
   },
   experiments: {
     typedRoutes: true,

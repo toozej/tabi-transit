@@ -3,6 +3,11 @@
 This is an Expo development-build application foundation. Vehicle screens use
 the normalized Tabi API only; they never call a transit provider directly.
 
+The primary application icon is `assets/images/tabi-app-icon.png`. Expo uses
+it for the shared app icon, iOS icon, Android adaptive icon foreground, and
+web favicon. Re-run a native prebuild/development build to see icon changes on
+an installed device.
+
 ## Vehicle vertical slice (WP-09)
 
 The map tab defaults to deterministic fixture mode and renders the same
