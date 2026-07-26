@@ -20,8 +20,9 @@ lint: ## Run repository linters
 typecheck: ## Run TypeScript type checks
 	@corepack pnpm typecheck
 
-test-unit: ## Run JavaScript and Go unit tests
+test-unit: ## Run JavaScript, mobile, and Go unit tests
 	@corepack pnpm test
+	@corepack pnpm --dir apps/mobile test
 	@GOCACHE=$(GO_CACHE_DIR) go test ./...
 
 test: test-unit ## Run the full deterministic unit-test suite

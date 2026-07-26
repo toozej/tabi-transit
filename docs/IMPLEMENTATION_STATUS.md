@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-07-24 (TriMet Arrivals V2 live smoke passes; production enablement remains terms-gated)
+Last updated: 2026-07-25 (root deterministic test suite includes mobile Vitest coverage; production enablement remains terms-gated)
 
 ## Repository baseline
 
@@ -73,6 +73,10 @@ WP-13 infrastructure is independently gated by the host ADR.
   `make test-trimet-live` smoke test passed on 2026-07-24 without printing an
   AppID or provider body. This establishes adapter compatibility only; it does
   not approve terms or enable a production feature.
+- Passed: `make test` now runs the root TypeScript suite, all deterministic
+  mobile Vitest tests (16 files and 35 tests), and all Go tests. This closed a
+  test-runner coverage gap where the mobile package had only been run
+  separately; it does not change the native RNTL/device evidence gate.
 
 ## Next integration milestone
 
