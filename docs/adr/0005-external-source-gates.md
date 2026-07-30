@@ -11,7 +11,7 @@ Transit data, Mapbox services, and optional sources have operational, contractua
 
 ## Decision
 
-Use TriMet official GTFS, GTFS-Realtime, and Web Services through backend adapters only. Keep TriMet privileged credentials server-side. Keep Portland Streetcar and Rose City integrations disabled unless canonical source ownership, rights, rate/retention, attribution, and written approval are documented. Do not scrape public web pages. Do not persist Mapbox geocoder data until the selected product and storage rules are approved.
+Use TriMet official GTFS, GTFS-Realtime, and Web Services through backend adapters only. Keep TriMet privileged credentials server-side. Treat Portland Streetcar schedule/realtime/arrival data included in those official TriMet sources as TriMet-provided `streetcar` coverage, not a separate provider integration; do not call or scrape Portland Streetcar, PBOT, or UmoIQ directly. Treat Rose City Transit as a TriMet-derived presentation/reference only: do not call, scrape, store data from, or imply a partnership with Rose City. Do not scrape public web pages. Do not persist Mapbox geocoder data until the selected product and storage rules are approved.
 
 ## Consequences
 
@@ -19,7 +19,7 @@ Missing credentials do not block unrelated work: adapters use typed configuratio
 
 ## Rollback / forward fix
 
-Disable any adapter by configuration and retain the last valid data under its freshness rules. Add an approved source through a new or amended ADR and contract review.
+Disable any adapter by configuration and retain the last valid data under its freshness rules. Add an approved source through a new or amended ADR and contract review. TriMet Streetcar coverage stays within the approved TriMet adapter boundary and is enabled only by validated runtime configuration.
 
 ## Validation
 

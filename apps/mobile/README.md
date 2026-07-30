@@ -64,13 +64,14 @@ background policy only allows deferrable static/cache maintenance and
 subscription reconciliation—never location monitoring or continuous vehicle
 polling.
 
-## Fixture trip planning foundation (WP-11)
+## Trip planning boundary (WP-11)
 
 The Plan tab is a provider-independent planning shell. It offers deterministic
 stop endpoint pickers, constraints, an accessible timeline that mirrors
 map-friendly leg geometry, safe opaque-ID planning links, and an explicit
-location-denied path. The mobile repository is deliberately fixture-only: it
-does not call Mapbox, TriMet, or any planner directly while D-001/D-004 and the
-server planner contract remain unresolved. Planning links never include precise
-coordinates or search text, and no endpoint or location data is persisted by
-this foundation.
+location-denied path. Fixture mode remains deterministic. In remote mode, the
+repository calls only Tabi's normalized `/v1/journeys/plan` endpoint for opaque
+TriMet stop IDs; it never calls Mapbox or TriMet directly. Local map pins and
+saved locations remain local-only until an explicit coordinate contract is
+implemented. Planning links never include precise coordinates or search text,
+and no endpoint or location data is persisted by this foundation.

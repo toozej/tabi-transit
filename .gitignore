@@ -30,6 +30,7 @@ google-services.json
 
 # Go and test artifacts
 bin/
+tabi-transit
 *.test
 *.prof
 
@@ -55,7 +56,7 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Preserve the implementation source archive at the repository root. Other
-# transient archives are ignored; source fixtures should use explicit formats.
+# Local source and image assets retained outside version control.
 *.zip
-!tabi-implementation-plan.zip
+tabi-implementation-plan.zip
+ChatGPT Image Jul 22, 2026, 09_59_40 AM.png

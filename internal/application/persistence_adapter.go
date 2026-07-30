@@ -13,6 +13,9 @@ type PersistenceVehicleStore struct{ Reader persistence.Reader }
 func (s PersistenceVehicleStore) ListCurrentVehicles(ctx context.Context, filter persistence.VehicleFilter) ([]persistence.Vehicle, error) {
 	return s.Reader.ListCurrentVehicles(ctx, filter)
 }
+func (s PersistenceVehicleStore) ListVehicleHistory(ctx context.Context, filter persistence.VehicleHistoryFilter) ([]persistence.VehicleObservation, error) {
+	return s.Reader.ListVehicleHistory(ctx, filter)
+}
 
 // PersistenceCatalog turns the public opaque cursor into the database keyset
 // cursor and maps persistence records into the public application model.

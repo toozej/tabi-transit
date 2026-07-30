@@ -59,9 +59,11 @@ Fetch bounded protobuf bytes, validate feed header/timestamp, normalize vehicles
 
 Normalize search, geocoding, POIs, proximity, attribution, and terms-aware cache; meter rate/cost.
 
-### Streetcar/Rose City
+### Streetcar/Rose City-inspired presentation
 
-Disabled until source/rights decision. Interface/fixtures can be prepared; no production scraper.
+Streetcar is represented as a TriMet-provided mode through the official TriMet
+source boundary; Rose City-inspired presentation uses the same normalized
+TriMet data. No direct provider scraper is permitted.
 
 ## Caching
 

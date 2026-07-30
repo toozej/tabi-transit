@@ -51,6 +51,31 @@ export const vehicleSearchSchema = z.object({
   freshness: freshnessSchema,
 });
 export const vehicleDetailSchema = z.object({ vehicle: vehicleSchema });
+/**
+ * A bounded, normalized vehicle-position timeline. It intentionally contains
+ * no adherence classification: vehicle positions alone cannot establish
+ * whether a service was early or late (ADR-0016).
+ */
+export const vehicleHistoryObservationSchema = z.object({
+  coordinate: coordinateSchema,
+  observedAt: z.string().datetime(),
+  routeId: z.string().min(1).optional(),
+  tripId: z.string().min(1).optional(),
+  mode: vehicleSchema.shape.mode,
+  freshness: z.object({
+    status: freshnessSchema.shape.status,
+    fetchedAt: z.string().datetime(),
+  }),
+});
+export const vehicleHistorySchema = z.object({
+  vehicleId: z.string().min(1),
+  observations: z.array(vehicleHistoryObservationSchema),
+  retentionDays: z.literal(30),
+  freshness: z.object({
+    status: z.literal("historical"),
+    source: z.literal("normalized-vehicle-observations"),
+  }),
+});
 export const configSchema = z.object({
   apiVersion: z.string().min(1),
   minimumAppVersion: z.string().min(1),
@@ -77,6 +102,10 @@ export type Vehicle = z.infer<typeof vehicleSchema> &
   components["schemas"]["Vehicle"];
 export type VehicleCollection = z.infer<typeof vehicleCollectionSchema>;
 export type VehicleSearch = z.infer<typeof vehicleSearchSchema>;
+export type VehicleHistory = z.infer<typeof vehicleHistorySchema>;
+export type VehicleHistoryObservation = z.infer<
+  typeof vehicleHistoryObservationSchema
+>;
 export type PublicConfig = z.infer<typeof configSchema>;
 export type VehicleMode = Vehicle["mode"];
 

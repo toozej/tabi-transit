@@ -117,4 +117,4 @@ Typed environment loader per binary. Categories include database, HTTP, TriMet, 
 
 ## Documentation/ADRs
 
-Each component README covers run/config/test/failure/attribution. Save sanitized external fixtures. Required ADRs include Linux host sizing/provider, version matrix, Compose/Caddy layout, Mapbox search/storage, TriMet versus OTP, Streetcar source, Rose City rights, push provider, observability profile, backup repository, history retention, Fly.io optional path, and Vitest/RNTL harness.
+Each component README covers run/config/test/failure/attribution. Save sanitized external fixtures. Required ADRs include Linux host sizing/provider, version matrix, Compose/Caddy layout, Mapbox search/storage, TriMet versus OTP, push provider, observability profile, backup repository, history retention, Fly.io optional path, and Vitest/RNTL harness. Streetcar and Rose City-inspired presentation follow the TriMet source ADR boundary.

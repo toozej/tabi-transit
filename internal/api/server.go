@@ -4,11 +4,13 @@ package api
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -65,14 +67,14 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 		r.Get("/alerts/{id}", s.alert)
 		r.Get("/vehicles", s.vehicles)
 		r.Get("/vehicles/search", s.vehicleSearch)
+		r.Get("/vehicles/{id}/history", s.vehicleHistory)
 		r.Get("/vehicles/{id}", s.vehicle)
 	})
 	return r
 }
 
-// The planning and external-place endpoints deliberately fail closed until
-// their documented provider gates are approved and an adapter is composed.
-// Do not parse or log potentially sensitive query/body values while disabled.
+// The external-place endpoints deliberately fail closed until their documented
+// Mapbox decision gate is approved and an adapter is composed.
 func (s *Server) placeSearch(w http.ResponseWriter, r *http.Request) {
 	s.featureUnavailable(w, r, application.FeaturePlaceSearch)
 }
@@ -82,7 +84,129 @@ func (s *Server) reverseGeocode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) planJourney(w http.ResponseWriter, r *http.Request) {
-	s.featureUnavailable(w, r, application.FeatureJourneyPlanner)
+	if s.app.Planning.Planner == nil {
+		s.featureUnavailable(w, r, application.FeatureJourneyPlanner)
+		return
+	}
+	var input journeyPlanInput
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		s.validation(w, r, "body", "invalid")
+		return
+	}
+	request, err := input.applicationRequest()
+	if err != nil {
+		s.validation(w, r, "body", "invalid")
+		return
+	}
+	plan, err := s.app.PlanJourney(r.Context(), request)
+	if errors.Is(err, application.ErrFeatureDisabled) || errors.Is(err, application.ErrUnavailable) {
+		s.featureUnavailable(w, r, application.FeatureJourneyPlanner)
+		return
+	}
+	if err != nil {
+		s.unavailable(w, r)
+		return
+	}
+	s.write(w, http.StatusOK, journeyPlanJSON(request, plan))
+}
+
+type journeyPlanInput struct {
+	Origin      journeyLocationInput    `json:"origin"`
+	Destination journeyLocationInput    `json:"destination"`
+	Time        journeyTimeInput        `json:"time"`
+	Preferences journeyPreferencesInput `json:"preferences"`
+}
+type journeyLocationInput struct {
+	Type       string    `json:"type"`
+	Coordinate []float64 `json:"coordinate"`
+	StopID     string    `json:"stopId"`
+	PlaceID    string    `json:"placeId"`
+	LocalID    string    `json:"localId"`
+	Label      string    `json:"label"`
+}
+type journeyTimeInput struct {
+	Mode  string    `json:"mode"`
+	Value time.Time `json:"value"`
+}
+type journeyPreferencesInput struct {
+	Modes                []string `json:"modes"`
+	MaxTransfers         *int     `json:"maxTransfers"`
+	MaxWalkMeters        *int     `json:"maxWalkingMeters"`
+	WheelchairAccessible bool     `json:"wheelchairAccessible"`
+	Optimize             string   `json:"optimize"`
+}
+
+func (input journeyPlanInput) applicationRequest() (application.JourneyRequest, error) {
+	origin, err := input.Origin.applicationPlace()
+	if err != nil {
+		return application.JourneyRequest{}, err
+	}
+	destination, err := input.Destination.applicationPlace()
+	if err != nil {
+		return application.JourneyRequest{}, err
+	}
+	if input.Time.Value.IsZero() {
+		return application.JourneyRequest{}, errors.New("time is required")
+	}
+	return application.JourneyRequest{Origin: origin, Destination: destination, Time: &application.JourneyTime{Mode: application.JourneyTimeMode(input.Time.Mode), Value: input.Time.Value}, Preferences: application.JourneyPreferences{Modes: input.Preferences.Modes, MaxTransfers: input.Preferences.MaxTransfers, MaxWalkMeters: input.Preferences.MaxWalkMeters, WheelchairAccessible: input.Preferences.WheelchairAccessible, Optimize: input.Preferences.Optimize}}, nil
+}
+func (input journeyLocationInput) applicationPlace() (application.PlaceReference, error) {
+	result := application.PlaceReference{Label: input.Label}
+	switch input.Type {
+	case "coordinate":
+		result.Kind = application.PlaceCoordinate
+	case "stop":
+		result.Kind, result.ID = application.PlaceStop, input.StopID
+	case "place":
+		result.Kind, result.ID = application.PlacePlace, input.PlaceID
+	case "saved", "recent":
+		result.Kind, result.ID = application.PlaceMapPin, input.LocalID
+	default:
+		return application.PlaceReference{}, errors.New("invalid place type")
+	}
+	if len(input.Coordinate) == 2 {
+		result.Coordinate = &persistence.Coordinate{Longitude: input.Coordinate[0], Latitude: input.Coordinate[1]}
+	}
+	return result, nil
+}
+func journeyPlanJSON(request application.JourneyRequest, plan application.JourneyPlan) map[string]any {
+	itineraries := make([]any, 0, len(plan.Itineraries))
+	for _, itinerary := range plan.Itineraries {
+		legs := make([]any, 0, len(itinerary.Legs))
+		for _, leg := range itinerary.Legs {
+			legJSON := map[string]any{"mode": leg.Mode, "fromName": leg.FromName, "toName": leg.ToName}
+			if leg.RouteID != "" {
+				legJSON["routeId"] = leg.RouteID
+			}
+			if leg.StartAt != nil {
+				legJSON["startAt"] = leg.StartAt.UTC().Format(time.RFC3339)
+			}
+			if leg.EndAt != nil {
+				legJSON["endAt"] = leg.EndAt.UTC().Format(time.RFC3339)
+			}
+			if leg.DistanceMeters != nil {
+				legJSON["distanceMeters"] = *leg.DistanceMeters
+			}
+			legs = append(legs, legJSON)
+		}
+		itineraries = append(itineraries, map[string]any{"id": itinerary.ID, "durationSeconds": itinerary.DurationSeconds, "transfers": itinerary.Transfers, "walkingMeters": itinerary.WalkMeters, "legs": legs})
+	}
+	return map[string]any{"planId": plan.PlanID, "origin": journeyEndpointJSON(request.Origin), "destination": journeyEndpointJSON(request.Destination), "itineraries": itineraries, "source": plan.Provider, "freshness": map[string]any{"source": plan.Freshness.Source, "fetchedAt": plan.Freshness.FetchedAt.UTC().Format(time.RFC3339), "processedAt": plan.Freshness.ProcessedAt.UTC().Format(time.RFC3339), "isRealtime": plan.Freshness.IsRealtime}}
+}
+func journeyEndpointJSON(place application.PlaceReference) map[string]any {
+	item := map[string]any{"type": string(place.Kind)}
+	if place.Coordinate != nil {
+		item["coordinate"] = []float64{place.Coordinate.Longitude, place.Coordinate.Latitude}
+	}
+	if place.Kind == application.PlaceStop {
+		item["stopId"] = place.ID
+	}
+	if place.Label != "" {
+		item["label"] = place.Label
+	}
+	return item
 }
 
 // Notification mutations intentionally fail before decoding credentials or
@@ -436,12 +560,39 @@ func requestID(ctx context.Context) string { v, _ := ctx.Value(requestIDKey{}).(
 func (s *Server) requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-Id")
-		if len(id) == 0 || len(id) > 128 || strings.ContainsAny(id, "\r\n") {
-			id = fmt.Sprintf("req_%d", time.Now().UnixNano())
+		if !validRequestID(id) {
+			id = newRequestID()
 		}
 		w.Header().Set("X-Request-Id", id)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
 	})
+}
+
+// Request IDs are safe, bounded correlation values. We only propagate a
+// caller-supplied value when it is a simple token so it remains safe for HTTP
+// headers and structured logs; arbitrary user input must never become a log
+// correlation field.
+func validRequestID(id string) bool {
+	if len(id) == 0 || len(id) > 128 {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-", r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func newRequestID() string {
+	var token [16]byte
+	if _, err := cryptorand.Read(token[:]); err == nil {
+		return "req_" + hex.EncodeToString(token[:])
+	}
+	// crypto/rand failures are exceptionally rare. Preserve request handling
+	// without reflecting untrusted input; the nanosecond suffix keeps this
+	// fallback distinguishable for local diagnostics.
+	return fmt.Sprintf("req_fallback_%d", time.Now().UnixNano())
 }
 func (s *Server) recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -477,7 +628,11 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	c := s.config.API
-	body := map[string]any{"apiVersion": c.Version, "minimumAppVersion": c.MinimumAppVersion, "features": map[string]any{"vehicleMap": map[string]any{"enabled": true}, "placeSearch": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "journeyPlanner": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "notifications": map[string]any{"enabled": false, "reason": application.ReasonNotificationGatePending}}, "sources": map[string]any{"trimetGtfsRt": map[string]any{"enabled": true}}, "pollingRecommendations": map[string]int{"vehiclesSeconds": 15}, "staleThresholdSeconds": map[string]int{"vehicles": c.StaleThresholdSeconds}, "serviceBounds": map[string]any{"bbox": []float64{-123, 45.3, -122.3, 45.8}}, "staticFeed": map[string]any{"version": c.StaticFeedVersion, "publishedAt": c.StaticFeedPublishedAt.UTC().Format(time.RFC3339)}}
+	planner := map[string]any{"enabled": s.app.Planning.Planner != nil}
+	if s.app.Planning.Planner == nil {
+		planner["reason"] = "planner_not_configured"
+	}
+	body := map[string]any{"apiVersion": c.Version, "minimumAppVersion": c.MinimumAppVersion, "features": map[string]any{"vehicleMap": map[string]any{"enabled": true}, "placeSearch": map[string]any{"enabled": false, "reason": "external_provider_gate_pending"}, "journeyPlanner": planner, "notifications": map[string]any{"enabled": false, "reason": application.ReasonNotificationGatePending}}, "sources": map[string]any{"trimetGtfsRt": map[string]any{"enabled": true}, "trimetStreetcar": map[string]any{"enabled": true}}, "pollingRecommendations": map[string]int{"vehiclesSeconds": 15}, "staleThresholdSeconds": map[string]int{"vehicles": c.StaleThresholdSeconds}, "serviceBounds": map[string]any{"bbox": []float64{-123, 45.3, -122.3, 45.8}}, "staticFeed": map[string]any{"version": c.StaticFeedVersion, "publishedAt": c.StaticFeedPublishedAt.UTC().Format(time.RFC3339)}}
 	w.Header().Set("X-Api-Version", c.Version)
 	s.etag(w, r, body)
 }
@@ -602,6 +757,90 @@ func (s *Server) vehicle(w http.ResponseWriter, r *http.Request) {
 	}
 	s.etag(w, r, map[string]any{"vehicle": vehicleJSON(v, time.Now().UTC())})
 }
+func (s *Server) vehicleHistory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := persistence.ValidatePublicID(id, "vehicle"); err != nil {
+		s.validation(w, r, "id", "invalid")
+		return
+	}
+	query, ok := s.parseVehicleHistoryQuery(r, w)
+	if !ok {
+		return
+	}
+	query.VehicleID = id
+	items, err := s.app.VehicleHistory(r.Context(), query)
+	if errors.Is(err, application.ErrUnavailable) {
+		s.unavailable(w, r)
+		return
+	}
+	if err != nil {
+		s.unavailable(w, r)
+		return
+	}
+	observations := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		entry := map[string]any{"coordinate": []float64{item.Coordinate.Longitude, item.Coordinate.Latitude}, "observedAt": item.ObservedAt.UTC().Format(time.RFC3339), "mode": item.Mode, "freshness": map[string]any{"status": item.Freshness, "fetchedAt": item.FetchedAt.UTC().Format(time.RFC3339)}}
+		if item.RouteID != nil {
+			entry["routeId"] = *item.RouteID
+		}
+		if item.TripID != nil {
+			entry["tripId"] = *item.TripID
+		}
+		observations = append(observations, entry)
+	}
+	body := map[string]any{"vehicleId": id, "observations": observations, "retentionDays": 30, "freshness": map[string]any{"status": "historical", "source": "normalized-vehicle-observations"}}
+	if len(items) == query.Limit {
+		body["nextCursor"] = items[len(items)-1].ObservedAt.UTC().Format(time.RFC3339Nano)
+	}
+	s.etag(w, r, body)
+}
+
+func (s *Server) parseVehicleHistoryQuery(r *http.Request, w http.ResponseWriter) (persistence.VehicleHistoryFilter, bool) {
+	now := time.Now().UTC()
+	to := now
+	from := now.Add(-24 * time.Hour)
+	if raw := r.URL.Query().Get("to"); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			s.validation(w, r, "to", "invalid")
+			return persistence.VehicleHistoryFilter{}, false
+		}
+		to = parsed.UTC()
+	}
+	if raw := r.URL.Query().Get("from"); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			s.validation(w, r, "from", "invalid")
+			return persistence.VehicleHistoryFilter{}, false
+		}
+		from = parsed.UTC()
+	}
+	if from.After(to) || to.Sub(from) > 30*24*time.Hour || from.Before(now.Add(-30*24*time.Hour)) {
+		s.validation(w, r, "window", "invalid")
+		return persistence.VehicleHistoryFilter{}, false
+	}
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 500 {
+			s.validation(w, r, "limit", "invalid")
+			return persistence.VehicleHistoryFilter{}, false
+		}
+		limit = parsed
+	}
+	var cursor *time.Time
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil || parsed.Before(from) || parsed.After(to) {
+			s.validation(w, r, "cursor", "invalid")
+			return persistence.VehicleHistoryFilter{}, false
+		}
+		utc := parsed.UTC()
+		cursor = &utc
+	}
+	return persistence.VehicleHistoryFilter{From: from, To: to, Limit: limit, Cursor: cursor}, true
+}
+
 func (s *Server) unavailable(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Retry-After", "30")
 	s.error(w, r, http.StatusServiceUnavailable, "source_unavailable", "Vehicle positions are temporarily unavailable.", map[string]any{"retryAfterSeconds": 30, "source": "normalized-vehicle-positions"})
@@ -893,7 +1132,13 @@ type vehicleQuery struct {
 	modes, sources, routes []string
 	freshness              string
 	geojson                bool
+	bounds                 *boundingBox
 }
+
+// boundingBox uses the API's WGS84 west,south,east,north ordering. It is
+// deliberately parsed at the HTTP boundary: callers never pass arbitrary
+// coordinate strings into persistence or source adapters.
+type boundingBox struct{ west, south, east, north float64 }
 
 func (s *Server) vehicleFilter(r *http.Request, w http.ResponseWriter) (vehicleQuery, bool) {
 	modes, e := parseModes(r.URL.Query().Get("modes"))
@@ -917,7 +1162,39 @@ func (s *Server) vehicleFilter(r *http.Request, w http.ResponseWriter) (vehicleQ
 			return vehicleQuery{}, false
 		}
 	}
-	return vehicleQuery{modes: modes, sources: split(r.URL.Query().Get("sources")), routes: split(r.URL.Query().Get("routes")), freshness: fq, geojson: format == "geojson"}, true
+	bounds, err := parseBoundingBox(r.URL.Query().Get("bbox"))
+	if err != nil {
+		s.validation(w, r, "bbox", "invalid")
+		return vehicleQuery{}, false
+	}
+	return vehicleQuery{modes: modes, sources: split(r.URL.Query().Get("sources")), routes: split(r.URL.Query().Get("routes")), freshness: fq, geojson: format == "geojson", bounds: bounds}, true
+}
+
+func parseBoundingBox(raw string) (*boundingBox, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) != 4 {
+		return nil, errors.New("bbox must have four coordinates")
+	}
+	values := [4]float64{}
+	for i, part := range parts {
+		value, err := strconv.ParseFloat(part, 64)
+		if err != nil {
+			return nil, err
+		}
+		values[i] = value
+	}
+	bounds := &boundingBox{west: values[0], south: values[1], east: values[2], north: values[3]}
+	if bounds.west < -180 || bounds.west > 180 || bounds.east < -180 || bounds.east > 180 || bounds.south < -90 || bounds.south > 90 || bounds.north < -90 || bounds.north > 90 || bounds.west > bounds.east || bounds.south > bounds.north {
+		return nil, errors.New("invalid WGS84 bounds")
+	}
+	return bounds, nil
+}
+
+func (b boundingBox) contains(coordinate persistence.Coordinate) bool {
+	return coordinate.Longitude >= b.west && coordinate.Longitude <= b.east && coordinate.Latitude >= b.south && coordinate.Latitude <= b.north
 }
 func split(v string) []string {
 	if v == "" {
@@ -935,6 +1212,9 @@ func filterVehicles(vs []persistence.Vehicle, q vehicleQuery) []persistence.Vehi
 			continue
 		}
 		if q.freshness != "" && q.freshness != string(v.Freshness) {
+			continue
+		}
+		if q.bounds != nil && !q.bounds.contains(v.Coordinate) {
 			continue
 		}
 		out = append(out, v)

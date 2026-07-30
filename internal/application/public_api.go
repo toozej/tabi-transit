@@ -48,9 +48,13 @@ type StopQuery struct {
 type VehicleStore interface {
 	ListCurrentVehicles(context.Context, persistence.VehicleFilter) ([]persistence.Vehicle, error)
 }
+type VehicleHistoryStore interface {
+	ListVehicleHistory(context.Context, persistence.VehicleHistoryFilter) ([]persistence.VehicleObservation, error)
+}
 type Service struct {
 	Catalog   Catalog
 	Vehicles  VehicleStore
+	History   VehicleHistoryStore
 	RiderInfo RiderInfo
 	// Planning remains feature-gated until D-001 (TriMet planner) and D-004
 	// (Mapbox search/geocoding) have reviewed credentials, terms, retention,
@@ -158,6 +162,12 @@ func (s Service) Vehicle(ctx context.Context, id string) (persistence.Vehicle, e
 		}
 	}
 	return persistence.Vehicle{}, errors.New("not found")
+}
+func (s Service) VehicleHistory(ctx context.Context, q persistence.VehicleHistoryFilter) ([]persistence.VehicleObservation, error) {
+	if s.History == nil {
+		return nil, ErrUnavailable
+	}
+	return s.History.ListVehicleHistory(ctx, q)
 }
 func (s Service) NearbyStops(ctx context.Context, q NearbyQuery) ([]persistence.NearbyStop, error) {
 	if s.RiderInfo == nil {

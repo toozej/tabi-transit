@@ -42,7 +42,7 @@ flowchart LR
   Poller --> PG
   Worker[Notification Worker] --> Push[Expo Push/APNs/FCM]
   Worker --> PG
-  Approved[Approved Streetcar/Rose City Sources] --> Poller
+  Approved[Official TriMet Sources] --> Poller
   API --> OTP[OpenTripPlanner later]
 ```
 
@@ -134,7 +134,7 @@ Tune queries/payloads → ETag/CDN where terms allow → Redis only when distrib
 ## Constraints
 
 - No privileged TriMet calls from mobile.
-- No undocumented Rose City dependency.
+- No undocumented direct-source dependency.
 - No all-fleet `MarkerView` rendering.
 - No terms-violating geocoder storage.
 - No assumption that upstream timestamps are current.

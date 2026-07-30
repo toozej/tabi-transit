@@ -70,3 +70,9 @@ func TestConfigIsDisabledWithoutEndpoint(t *testing.T) {
 		t.Fatalf("%v", e)
 	}
 }
+
+func TestRouteTypeFiveNormalizesToStreetcar(t *testing.T) {
+	if got := mode("5"); got != "streetcar" {
+		t.Fatalf("GTFS route_type=5 mode = %q, want streetcar", got)
+	}
+}

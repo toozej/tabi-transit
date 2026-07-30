@@ -11,7 +11,6 @@
 | R-007 | Mapbox cost or terms violation            | Financial/legal exposure          | Token restriction, budget, approved storage policy                  | Product/Security | Open   |
 | R-008 | Single-host outage/disk exhaustion        | Service outage/data loss          | Off-site backups, rotated logs, headroom alerts, restore rehearsal  | Operations       | Open   |
 | R-009 | Supply-chain or CI secret compromise      | Credential/code compromise        | Pinning, scans, protected environments, no secrets in untrusted PRs | Security         | Open   |
-| R-010 | Optional-source rights unavailable        | Scope gap                         | Keep disabled; obtain written approval; no scraping                 | Product/Legal    | Open   |
 | R-011 | Fly cost/recovery assumptions             | Unplanned spend/outage            | Optional only; current pricing and recovery review                  | Operations       | Open   |
 
 Risk review is required before enabling an external provider, production deployment, notifications, or persistent geocoder storage.

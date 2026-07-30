@@ -15,8 +15,8 @@ depends_on: ["TAB-PLAN-001", "TAB-PLAN-002", "TAB-PLAN-008"]
 1. TriMet official GTFS Schedule.
 2. TriMet official GTFS-Realtime.
 3. TriMet official Web Services.
-4. Official/canonical Portland Streetcar or other agency feed.
-5. Rose City Transit only under documented API/permission/license.
+4. Streetcar rows included in TriMet official GTFS, GTFS-Realtime, and Arrivals V2.
+5. Rose City-inspired presentation from normalized TriMet data only.
 
 No human webpage becomes a production machine dependency without legal/technical ADR approval.
 
@@ -59,22 +59,23 @@ Freshness states `fresh`, `aging`, `stale`, `unknown` are source-configurable an
 
 Use for detailed arrivals, route/stop, vehicle/trip/block status, and planning not represented adequately in GTFS/RT. Server-side AppID, terms-aware caching/retention, fixtures, schema-drift monitoring, feature flags for beta, explicit provider↔GTFS ID mapping.
 
-## Portland Streetcar gate
+## Portland Streetcar coverage through TriMet
 
-1. Contact Streetcar/PBOT and identify canonical feeds/API.
-2. Determine what is already in TriMet GTFS/RT.
-3. Clarify UmoIQ relationship.
-4. Obtain docs, credentials, limits, license, attribution.
-5. Capture fixtures.
-6. Implement adapter and deduplication.
-7. Stage/field validate.
-8. Enable by feature flag.
+1. Ingest and classify `route_type=5` as `streetcar` from TriMet GTFS.
+2. Consume Streetcar arrivals only through TriMet Arrivals V2, which documents
+   Streetcar results as included by default.
+3. Preserve TriMet source/freshness semantics and the documented Streetcar
+   estimate marker where represented internally.
+4. Do not add a Portland Streetcar, PBOT, or UmoIQ adapter, credential, or
+   HTML/JavaScript scraper.
+5. Production use remains subject to the TriMet D-001 terms and enablement
+   decision.
 
-No HTML/JavaScript scraping by default.
+## Rose City Transit-inspired presentation
 
-## Rose City Transit gate
-
-Request API/export, rate limits, license/redistribution, attribution/social links, advanced fields/history rights, change contact, and preferred contribution model. Treat it as a collaborator/reference, not a hidden dependency.
+Use normalized TriMet data only. Do not request, fetch, store, or scrape Rose
+City data, and do not imply a partnership. Any long-lived history remains
+subject to the separate retention/data-rights decision.
 
 ## Quality dashboards
 
@@ -82,7 +83,7 @@ Last success/age, entity counts, unmatched references, invalid coordinates, time
 
 ## Fixtures
 
-Normal/empty/stale/malformed/deleted/unmatched realtime; vehicle without trip; skipped stop; multi-entity alert; after-midnight; duplicate IDs; malicious ZIP; static regression; approved Streetcar examples.
+Normal/empty/stale/malformed/deleted/unmatched realtime; vehicle without trip; skipped stop; multi-entity alert; after-midnight; duplicate IDs; malicious ZIP; static regression; TriMet Streetcar examples.
 
 ## Acceptance
 

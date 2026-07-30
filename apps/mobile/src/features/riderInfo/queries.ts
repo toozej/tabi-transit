@@ -8,6 +8,8 @@ export const riderInfoKeys = {
   arrivals: (stopId: string) => ["arrivals", stopId] as const,
   route: (id: string) => ["route", id] as const,
   routeShape: (id: string) => ["route-shape", id] as const,
+  routeStops: (id: string, directionId?: 0 | 1) =>
+    ["route-stops", id, directionId] as const,
   schedule: (id: string) => ["schedule", id] as const,
   alerts: ["alerts"] as const,
   manifest: ["static-manifest"] as const,
@@ -45,6 +47,14 @@ export function useRouteShape(id: string) {
     queryKey: riderInfoKeys.routeShape(id),
     queryFn: () => riderInfoRepository.routeShape(id),
     enabled: Boolean(id),
+    staleTime: Infinity,
+  });
+}
+export function useRouteStops(id: string, directionId?: 0 | 1) {
+  return useQuery({
+    queryKey: riderInfoKeys.routeStops(id, directionId),
+    queryFn: () => riderInfoRepository.routeStops(id, directionId),
+    enabled: Boolean(id) && directionId !== undefined,
     staleTime: Infinity,
   });
 }

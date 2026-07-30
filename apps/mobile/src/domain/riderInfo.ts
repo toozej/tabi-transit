@@ -54,6 +54,15 @@ export const routeDetailSchema = z.object({
   alertIds: z.array(z.string()).optional(),
   freshness: freshnessSchema,
 });
+export const routeStopSchema = stopSchema.extend({
+  sequence: z.number().int().nonnegative(),
+});
+export const routeStopCollectionSchema = z.object({
+  routeId: z.string().min(1),
+  directionId: z.union([z.literal(0), z.literal(1)]).optional(),
+  stops: z.array(routeStopSchema),
+  staticFeedVersion: z.string(),
+});
 export const stopDetailSchema = z.object({
   stop: stopSchema,
   staticFeedVersion: z.string(),
@@ -137,6 +146,8 @@ export const routeShapeSchema = z.object({
 export type Stop = z.infer<typeof stopSchema> & components["schemas"]["Stop"];
 export type NearbyStops = z.infer<typeof nearbyStopsSchema>;
 export type RouteDetail = z.infer<typeof routeDetailSchema>;
+export type RouteStop = z.infer<typeof routeStopSchema>;
+export type RouteStopCollection = z.infer<typeof routeStopCollectionSchema>;
 export type Arrival = z.infer<typeof arrivalSchema>;
 export type Alert = z.infer<typeof alertSchema>;
 export type StaticManifest = z.infer<typeof staticManifestSchema>;
@@ -170,4 +181,12 @@ export function serviceDayTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/**
+ * The API returns an ordered collection, but sequence is retained so a mobile
+ * cache or fixture cannot accidentally display a route's stops out of order.
+ */
+export function orderRouteStops(stops: readonly RouteStop[]): RouteStop[] {
+  return [...stops].sort((left, right) => left.sequence - right.sequence);
 }

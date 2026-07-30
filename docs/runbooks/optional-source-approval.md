@@ -1,7 +1,7 @@
 # Optional-source approval review
 
-Use this review before starting WP-18 or enabling any Portland Streetcar or
-Rose City Transit capability. It is an evidence checklist, not authorization to
+Use this review before enabling a direct optional external source. It is an
+evidence checklist, not authorization to
 contact a provider, fetch a feed, or scrape a public site.
 
 ## Required record for each source
@@ -29,4 +29,8 @@ the owner who approved it.
 
 Until that ADR is accepted, preserve the disabled configuration response and do
 not add an adapter, provider-derived fixture, specialist history/adherence
-view, or source credit claim.
+view, or source credit claim. This runbook does not apply to Streetcar or Rose
+City-inspired presentation data
+already supplied through TriMet's official GTFS, GTFS-Realtime, or Arrivals V2
+interfaces; that coverage stays within the approved TriMet boundary and must not add a
+direct Streetcar/PBOT/UmoIQ/Rose City dependency.

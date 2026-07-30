@@ -11,7 +11,7 @@ Run:
 ```sh
 make generate-check
 make test-integration
-node tests/performance/vehicle_geojson_payload.mjs
+make test-vehicle-payload-benchmark
 ```
 
 `tests/integration/run.sh` checks the representative API fixtures, OpenAPI

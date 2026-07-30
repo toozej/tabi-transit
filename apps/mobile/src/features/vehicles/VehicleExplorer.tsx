@@ -18,7 +18,13 @@ import { VehicleMap } from "@/maps/VehicleMap";
 import { useMapUiStore } from "@/state/mapUiStore";
 
 import { VehicleList } from "./VehicleList";
-import { useVehicleDetail, useVehicleSearch, useVehicles } from "./queries";
+import { VehicleHistory } from "./VehicleHistory";
+import {
+  useVehicleDetail,
+  useVehicleHistory,
+  useVehicleSearch,
+  useVehicles,
+} from "./queries";
 
 const MODES: readonly VehicleMode[] = [
   "bus",
@@ -39,6 +45,7 @@ export function VehicleExplorer() {
   const vehiclesQuery = useVehicles(filters);
   const searchQuery = useVehicleSearch(search);
   const detailQuery = useVehicleDetail(selectedVehicleId);
+  const historyQuery = useVehicleHistory(selectedVehicleId);
   const collection = vehiclesQuery.data;
   const vehicles = filterVehicles(collection?.vehicles ?? [], filters);
   const mapAvailable = getMapboxAccessToken() !== undefined;
@@ -146,6 +153,11 @@ export function VehicleExplorer() {
               This vehicle is not shown as live.
             </Text>
           )}
+          <VehicleHistory
+            history={historyQuery.data}
+            isError={historyQuery.isError}
+            isLoading={historyQuery.isLoading}
+          />
         </View>
       )}
     </ScrollView>

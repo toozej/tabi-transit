@@ -15,6 +15,44 @@ describe("VehicleRepository", () => {
     await expect(repository.search("2901")).resolves.toMatchObject({
       vehicles: [{ id: "fixture:vehicle:2901" }],
     });
+    const history = await repository.history("fixture:vehicle:2901");
+    expect(history.vehicleId).toBe("fixture:vehicle:2901");
+    expect(history.observations[0]?.observedAt).toBe("2026-07-22T16:15:02Z");
+    await expect(
+      repository.history("fixture:vehicle:unknown"),
+    ).resolves.toMatchObject({
+      observations: [],
+    });
+  });
+
+  it("validates the remote normalized history response", async () => {
+    const request = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          vehicleId: "trimet:vehicle:2901",
+          observations: [],
+          retentionDays: 30,
+          freshness: {
+            source: "normalized-vehicle-observations",
+            status: "historical",
+          },
+        }),
+      ),
+    );
+    const repository = new VehicleRepository(
+      { apiMode: "remote", apiBaseUrl: "https://api.example.test" },
+      request,
+    );
+
+    await expect(
+      repository.history("trimet:vehicle:2901"),
+    ).resolves.toMatchObject({
+      vehicleId: "trimet:vehicle:2901",
+    });
+    expect(request).toHaveBeenCalledWith(
+      "https://api.example.test/v1/vehicles/trimet%3Avehicle%3A2901/history",
+      expect.anything(),
+    );
   });
 
   it("sends and reuses an ETag for remote snapshots", async () => {

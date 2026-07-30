@@ -352,6 +352,44 @@ type CatalogSource struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type HistoryTripUpdateObservation struct {
+	SourceID                 string             `json:"source_id"`
+	SnapshotID               int64              `json:"snapshot_id"`
+	EntityID                 string             `json:"entity_id"`
+	TripPublicID             string             `json:"trip_public_id"`
+	RoutePublicID            pgtype.Text        `json:"route_public_id"`
+	StartDate                pgtype.Date        `json:"start_date"`
+	StopSequence             int32              `json:"stop_sequence"`
+	StopPublicID             pgtype.Text        `json:"stop_public_id"`
+	TripScheduleRelationship pgtype.Text        `json:"trip_schedule_relationship"`
+	StopScheduleRelationship pgtype.Text        `json:"stop_schedule_relationship"`
+	ArrivalDelaySeconds      pgtype.Int4        `json:"arrival_delay_seconds"`
+	DepartureDelaySeconds    pgtype.Int4        `json:"departure_delay_seconds"`
+	ArrivalTime              pgtype.Timestamptz `json:"arrival_time"`
+	DepartureTime            pgtype.Timestamptz `json:"departure_time"`
+	SourceUpdatedAt          pgtype.Timestamptz `json:"source_updated_at"`
+	FetchedAt                pgtype.Timestamptz `json:"fetched_at"`
+	ProcessedAt              pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+}
+
+type HistoryVehicleObservation struct {
+	SourceID        string                  `json:"source_id"`
+	PublicID        string                  `json:"public_id"`
+	SourceVehicleID string                  `json:"source_vehicle_id"`
+	SnapshotID      int64                   `json:"snapshot_id"`
+	RoutePublicID   pgtype.Text             `json:"route_public_id"`
+	TripPublicID    pgtype.Text             `json:"trip_public_id"`
+	Mode            TransitMode             `json:"mode"`
+	Point           string                  `json:"point"`
+	SourceUpdatedAt pgtype.Timestamptz      `json:"source_updated_at"`
+	EntityUpdatedAt pgtype.Timestamptz      `json:"entity_updated_at"`
+	FetchedAt       pgtype.Timestamptz      `json:"fetched_at"`
+	ProcessedAt     pgtype.Timestamptz      `json:"processed_at"`
+	FreshnessStatus RealtimeFreshnessStatus `json:"freshness_status"`
+	CreatedAt       pgtype.Timestamptz      `json:"created_at"`
+}
+
 type OpsSourceHealth struct {
 	SourceID            string             `json:"source_id"`
 	LastAttemptAt       pgtype.Timestamptz `json:"last_attempt_at"`

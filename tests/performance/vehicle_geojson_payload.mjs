@@ -14,10 +14,12 @@ function vehicle(index) {
   };
 }
 
-for (const size of fleetSizes) {
-  const vehicles = Array.from({ length: size }, (_, index) => vehicle(index));
-  const started = performance.now();
-  const collection = {
+function jsonPayload(vehicles) {
+  return JSON.stringify({ vehicles });
+}
+
+function geoJsonPayload(vehicles) {
+  return JSON.stringify({
     type: "FeatureCollection",
     features: vehicles.map((item) => ({
       type: "Feature",
@@ -25,9 +27,21 @@ for (const size of fleetSizes) {
       geometry: { type: "Point", coordinates: item.coordinate },
       properties: { id: item.id, mode: item.mode, freshness: item.freshness },
     })),
-  };
-  const payload = JSON.stringify(collection);
-  const elapsedMs = performance.now() - started;
+  });
+}
+
+function measure(build) {
+  const started = performance.now();
+  const payload = build();
+  return { payload, elapsedMs: performance.now() - started };
+}
+
+for (const size of fleetSizes) {
+  const vehicles = Array.from({ length: size }, (_, index) => vehicle(index));
+  const json = measure(() => jsonPayload(vehicles));
+  const geoJson = measure(() => geoJsonPayload(vehicles));
+
+  const collection = JSON.parse(geoJson.payload);
   if (
     collection.features.length !== size ||
     collection.features.some(
@@ -37,6 +51,6 @@ for (const size of fleetSizes) {
     throw new Error(`invalid GeoJSON generated for ${size} vehicles`);
   }
   console.log(
-    `${size} vehicles: ${Buffer.byteLength(payload)} bytes; ${elapsedMs.toFixed(2)} ms build/stringify`,
+    `${size} vehicles: JSON ${Buffer.byteLength(json.payload)} bytes / ${json.elapsedMs.toFixed(2)} ms; GeoJSON ${Buffer.byteLength(geoJson.payload)} bytes / ${geoJson.elapsedMs.toFixed(2)} ms`,
   );
 }

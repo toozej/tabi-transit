@@ -55,9 +55,9 @@ Review current terms; retain logo/attribution; expose telemetry control; documen
 
 Register/review AppID terms, rates, cache/retention/attribution, beta behavior, GTFS/GIS terms, developer notices. AppID server-side.
 
-## Rose City/Streetcar obligations
+## Direct-source obligations
 
-Written API/source ownership, rate, license/redistribution, attribution, history rights, and contact. Do not imply partnership or scrape public map. Deduplicate overlapping sources.
+Written API/source ownership, rate, license/redistribution, attribution, history rights, and contact. Do not imply partnership or scrape public map. Deduplicate overlapping sources. Streetcar and Rose City-inspired presentation supplied by TriMet follow the TriMet source boundary and D-001 review.
 
 ## Open source/store
 

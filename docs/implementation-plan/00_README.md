@@ -23,7 +23,9 @@ This directory is the implementation source of truth for **Tabi**, a modern Port
 - Vitest for framework-independent TypeScript; React Native Testing Library with a Vitest-compatible harness proven in Phase 0; Maestro for device E2E.
 - OpenAPI-first client/server contracts.
 
-Rose City Transit and Portland Streetcar integrations are gated by source, licensing, and permission verification. No scraping is included by default.
+Portland Streetcar coverage and Rose City Transit-inspired presentation are
+consumed through TriMet's official GTFS, GTFS-Realtime, and Arrivals V2
+interfaces. No direct-source scraping is included by default.
 
 The canonical production deployment is a single Linux Docker host. Files under `deployment/` are implementation templates for Compose, Caddy, systemd timers, backup, restore, and deployment. Fly.io is optional and is not the canonical production control plane.
 

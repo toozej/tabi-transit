@@ -8,6 +8,7 @@ import (
 	"github.com/toozej/tabi-transit/internal/config"
 	"github.com/toozej/tabi-transit/internal/persistence"
 	"github.com/toozej/tabi-transit/internal/persistence/sqlcgen"
+	"github.com/toozej/tabi-transit/internal/sources/trimet"
 	"log/slog"
 	"net/http"
 	"os"
@@ -42,8 +43,22 @@ func main() {
 		service = application.Service{
 			Catalog:   application.PersistenceCatalog{Reader: reader},
 			Vehicles:  application.PersistenceVehicleStore{Reader: reader},
+			History:   application.PersistenceVehicleStore{Reader: reader},
 			RiderInfo: application.PersistenceRiderInfo{Reader: reader},
 		}
+	}
+	trimetConfig, err := trimet.LoadConfig(os.Getenv, os.ReadFile)
+	if err != nil {
+		slog.Error("invalid TriMet configuration", "error", err.Error())
+		os.Exit(1)
+	}
+	if trimetConfig.PlannerEnabled {
+		client, clientErr := trimet.NewClient(trimetConfig, nil, nil)
+		if clientErr != nil {
+			slog.Error("invalid TriMet planner configuration", "error", clientErr.Error())
+			os.Exit(1)
+		}
+		service.Planning.Planner = application.NewTriMetPlanner(client)
 	}
 	options := []api.Option{}
 	if pool != nil && reader != nil {

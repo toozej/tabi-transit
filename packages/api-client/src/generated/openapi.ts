@@ -339,6 +339,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/vehicles/{id}/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get up to 30 days of normalized vehicle observations.
+     * @description Historical positions are normalized observations, not inferred schedule adherence.
+     */
+    get: operations["getVehicleHistory"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/search": {
     parameters: {
       query?: never;
@@ -397,8 +417,8 @@ export interface paths {
      * Plan a normalized A-to-B journey when the planner feature is enabled.
      * @description Provider responses are normalized before they leave the backend. Unsupported
      *     preferences are disclosed in `unsupportedPreferences`; hard constraints are
-     *     enforced or the request returns no itineraries. The planner remains disabled
-     *     until the TriMet AppID and terms/rate/cache/attribution decision gate passes.
+     *     enforced or the request returns no itineraries. Availability is reported by
+     *     `/v1/config` and requires the server-side TriMet planner configuration.
      */
     post: operations["planJourney"];
     delete?: never;
@@ -872,6 +892,33 @@ export interface components {
     };
     VehicleDetailResponse: {
       vehicle: components["schemas"]["Vehicle"];
+    };
+    VehicleObservation: {
+      coordinate: components["schemas"]["Coordinate"];
+      /** Format: date-time */
+      observedAt: string;
+      routeId?: components["schemas"]["QualifiedId"];
+      tripId?: components["schemas"]["QualifiedId"];
+      mode: components["schemas"]["TransitMode"];
+      freshness: {
+        status: components["schemas"]["FreshnessStatus"];
+        /** Format: date-time */
+        fetchedAt: string;
+      };
+    };
+    VehicleHistoryResponse: {
+      vehicleId: components["schemas"]["QualifiedId"];
+      observations: components["schemas"]["VehicleObservation"][];
+      /** Format: date-time */
+      nextCursor?: string;
+      /** @enum {integer} */
+      retentionDays: 30;
+      freshness: {
+        /** @enum {string} */
+        status: "historical";
+        /** @enum {string} */
+        source: "normalized-vehicle-observations";
+      };
     };
     /** @enum {string} */
     PlaceKind:
@@ -1793,6 +1840,41 @@ export interface operations {
       };
       304: components["responses"]["NotModified"];
       404: components["responses"]["NotFound"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getVehicleHistory: {
+    parameters: {
+      query?: {
+        from?: string;
+        to?: string;
+        limit?: number;
+        /** @description Exclusive observation timestamp returned as `nextCursor`. */
+        cursor?: string;
+      };
+      header?: {
+        "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+      };
+      path: {
+        id: components["parameters"]["VehicleId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A bounded reverse-chronological page of observations. */
+      200: {
+        headers: {
+          ETag: components["headers"]["ETag"];
+          "X-Request-Id": components["headers"]["RequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VehicleHistoryResponse"];
+        };
+      };
+      304: components["responses"]["NotModified"];
+      400: components["responses"]["ValidationError"];
       default: components["responses"]["ErrorResponse"];
     };
   };

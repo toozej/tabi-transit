@@ -32,7 +32,7 @@ Agents work through contracts, migrations, fixtures, generated clients, and docu
 | WP-15 | SRE | OTel/logs, dashboards/alerts/SLOs/synthetics/runbooks | WP-07/13 |
 | WP-16 | QA/accessibility | matrix, Maestro, load/failure, manual reports, gates | Incremental |
 | WP-17 | Security/privacy | threat model, terms, scans/redaction, store forms/notices | Inventory |
-| WP-18 | Optional sources | written permission, source contract, adapters/dedup/credits | Approval |
+| WP-18 | TriMet-derived presentation | TriMet Streetcar normalization and Rose City-inspired presentation; direct-source adapters/dedup only when separately approved | D-001 for production TriMet use |
 
 ## Detailed handoff expectations
 
@@ -65,5 +65,5 @@ Every package supplies:
 - Infra agents do not choose retention/privacy policy.
 - Infrastructure work must keep the single-host Compose deployment canonical; Fly.io files are optional adapters.
 - QA agents can block release for unmet product/security/accessibility gates.
-- Optional-source agent cannot deploy a scraper without written ADR approval.
+- Source agent cannot deploy a scraper without written ADR approval.
 - Generated code is not hand-edited.

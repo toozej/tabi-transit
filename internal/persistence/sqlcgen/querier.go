@@ -51,6 +51,9 @@ type Querier interface {
 	// are deliberately returned unchanged so after-midnight trips remain correct.
 	ListStopSchedule(ctx context.Context, arg ListStopScheduleParams) ([]ListStopScheduleRow, error)
 	ListStops(ctx context.Context, arg ListStopsParams) ([]ListStopsRow, error)
+	// Observations are normalized positions, not a claim about schedule adherence.
+	// A caller-enforced 30 day window keeps this read aligned with retention.
+	ListVehicleHistory(ctx context.Context, arg ListVehicleHistoryParams) ([]ListVehicleHistoryRow, error)
 	MarkNotificationDeliveryExpired(ctx context.Context, arg MarkNotificationDeliveryExpiredParams) (int64, error)
 	MarkNotificationDeliveryFailed(ctx context.Context, arg MarkNotificationDeliveryFailedParams) (int64, error)
 	MarkNotificationDeliveryRetry(ctx context.Context, arg MarkNotificationDeliveryRetryParams) (int64, error)

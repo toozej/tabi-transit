@@ -18,7 +18,7 @@ Work:
 
 - Register/review TriMet AppID and terms.
 - Create Mapbox environment tokens, budgets, and style prototype.
-- Contact Rose City Transit and Streetcar/PBOT.
+- Verify TriMet Streetcar and Rose City-inspired presentation coverage through the official TriMet interfaces.
 - Pin Expo/RN/RNMapbox/Mapbox native/Go/Postgres versions.
 - Physical RNMapbox and 1,500-point performance spike.
 - Expo CNG/EAS builds.
@@ -64,9 +64,14 @@ Exit: no duplicate/late time-sensitive push; rotation/deletion/privacy; outage i
 
 ## Phase 5 — Streetcar and specialist views
 
-Only after approval: canonical adapter, deduplication, optional Rose City API, SystemMapper-inspired status/block/adherence/history screens, credits.
+Implement TriMet-provided Streetcar normalization and Rose City-inspired
+presentation through the existing official source boundaries. ADR-0013 clears
+the 30-day normalized-history persistence gate; rider-visible
+status/block/adherence/history screens still need their API/UI contract and
+TriMet D-001 production enablement.
 
-Exit: written rights, health/runbooks, no duplicates, accessible alternatives, retention ADR.
+Exit: TriMet terms/enablement, health/runbooks, no duplicates, accessible
+alternatives, and the accepted 30-day retention ADR.
 
 ## Phase 6 — Production launch
 

@@ -27,6 +27,7 @@ type arrivalDTO struct {
 	Scheduled providerTime `json:"scheduled"`
 	Estimated providerTime `json:"estimated"`
 	Status    string       `json:"status"`
+	Streetcar bool         `json:"streetCar"`
 }
 
 // providerTime accepts the documented Unix epoch milliseconds used by TriMet
@@ -241,7 +242,7 @@ func sortedJSONKeys(values map[string]json.RawMessage) []string {
 func mapArrivals(input arrivalsResponse) []Arrival {
 	output := make([]Arrival, 0, len(input.ResultSet.Arrival))
 	for _, v := range input.ResultSet.Arrival {
-		output = append(output, Arrival{StopID: v.StopID.String(), RouteID: v.RouteID.String(), TripID: v.TripID, VehicleID: v.VehicleID, Headsign: v.Headsign, ScheduledAt: v.Scheduled.Time(), EstimatedAt: v.Estimated.Time(), Status: v.Status})
+		output = append(output, Arrival{StopID: v.StopID.String(), RouteID: v.RouteID.String(), TripID: v.TripID, VehicleID: v.VehicleID, Headsign: v.Headsign, ScheduledAt: v.Scheduled.Time(), EstimatedAt: v.Estimated.Time(), Status: v.Status, Streetcar: v.Streetcar})
 	}
 	return output
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyNearbyLimit,
   formatDistance,
+  orderRouteStops,
   serviceDayTime,
   type NearbyStops,
 } from "./riderInfo";
@@ -63,5 +64,13 @@ describe("rider information domain", () => {
   it("formats distance and service times beyond midnight", () => {
     expect(formatDistance(1250)).toBe("1.3 km away");
     expect(serviceDayTime(90_060)).toBe("25:01");
+  });
+  it("orders route stops by their explicit sequence without mutating the source", () => {
+    const stops = [
+      { ...nearby.groups[0]!.stops[0]!, sequence: 2 },
+      { ...nearby.groups[0]!.stops[1]!, sequence: 1 },
+    ];
+    expect(orderRouteStops(stops).map((stop) => stop.sequence)).toEqual([1, 2]);
+    expect(stops.map((stop) => stop.sequence)).toEqual([2, 1]);
   });
 });

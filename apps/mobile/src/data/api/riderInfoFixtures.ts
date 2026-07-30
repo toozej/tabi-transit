@@ -3,6 +3,7 @@ import type {
   NearbyStops,
   RouteDetail,
   RouteShape,
+  RouteStopCollection,
   Schedule,
   StaticManifest,
   Stop,
@@ -79,6 +80,42 @@ export const fixtureRoute: RouteDetail = {
   staticFeedVersion: "fixture-v1",
   freshness: riderFreshness,
 };
+export const fixtureRouteStops: RouteStopCollection[] = [
+  {
+    routeId: "fixture:route:20",
+    directionId: 0,
+    staticFeedVersion: "fixture-v1",
+    stops: [
+      { ...fixtureStops[0]!, sequence: 1 },
+      {
+        id: "fixture:stop:103",
+        name: "Burnside & 23rd",
+        coordinate: [-122.699, 45.522],
+        modes: ["bus"],
+        routeIds: ["fixture:route:20"],
+        wheelchairAccessible: true,
+        sequence: 2,
+      },
+    ],
+  },
+  {
+    routeId: "fixture:route:20",
+    directionId: 1,
+    staticFeedVersion: "fixture-v1",
+    stops: [
+      {
+        id: "fixture:stop:103",
+        name: "Burnside & 23rd",
+        coordinate: [-122.699, 45.522],
+        modes: ["bus"],
+        routeIds: ["fixture:route:20"],
+        wheelchairAccessible: true,
+        sequence: 2,
+      },
+      { ...fixtureStops[0]!, sequence: 1 },
+    ],
+  },
+];
 export const fixtureAlerts: Alert[] = [
   {
     id: "fixture:alert:1",

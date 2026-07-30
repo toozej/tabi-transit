@@ -10,4 +10,4 @@ Phase 0 is in progress. The repository foundation, API contract, mobile compatib
 
 ## Safety and source policy
 
-Tabi uses official sources through backend adapters. Optional Rose City Transit and Portland Streetcar sources are disabled pending their documented approval gates. Never add provider credentials, production tokens, or `.env` files to Git.
+Tabi uses official sources through backend adapters. Portland Streetcar coverage and Rose City Transit-inspired presentation use TriMet's official feeds and Arrivals V2 interface; Tabi has no direct Streetcar/PBOT/UmoIQ or Rose City integration. Never add provider credentials, production tokens, or `.env` files to Git.

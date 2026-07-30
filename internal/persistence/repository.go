@@ -143,6 +143,23 @@ type AlertFilter struct {
 }
 
 type VehicleFilter struct{ SourceIDs []string }
+
+// VehicleHistoryFilter is deliberately bounded by the caller to the approved
+// retention interval. Cursor is an exclusive processed-at keyset cursor.
+type VehicleHistoryFilter struct {
+	VehicleID string
+	From, To  time.Time
+	Limit     int
+	Cursor    *time.Time
+}
+type VehicleObservation struct {
+	VehicleID, SourceID, SourceVehicleID string
+	RouteID, TripID                      *string
+	Mode                                 string
+	Coordinate                           Coordinate
+	ObservedAt, FetchedAt                time.Time
+	Freshness                            FreshnessStatus
+}
 type CatalogRoute struct {
 	ID, Mode, ShortName, LongName string
 	Color, TextColor              *string
@@ -179,6 +196,7 @@ type Reader interface {
 	ActiveFeedVersion(ctx context.Context, sourceID string) (FeedVersion, error)
 	SourceHealth(ctx context.Context, sourceID string) (SourceHealth, error)
 	ListCurrentVehicles(ctx context.Context, filter VehicleFilter) ([]Vehicle, error)
+	ListVehicleHistory(ctx context.Context, filter VehicleHistoryFilter) ([]VehicleObservation, error)
 	ListNearbyStops(ctx context.Context, filter NearbyStopsFilter) ([]NearbyStop, error)
 }
 

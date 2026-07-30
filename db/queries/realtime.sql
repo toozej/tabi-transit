@@ -7,6 +7,21 @@ FROM realtime.vehicle_current
 WHERE (cardinality(sqlc.narg(source_ids)::text[]) IS NULL OR source_id = ANY(sqlc.narg(source_ids)::text[]))
 ORDER BY public_id;
 
+-- name: ListVehicleHistory :many
+-- Observations are normalized positions, not a claim about schedule adherence.
+-- A caller-enforced 30 day window keeps this read aligned with retention.
+SELECT source_id, public_id, source_vehicle_id, route_public_id, trip_public_id,
+       mode, ST_X(point::geometry)::double precision AS longitude,
+       ST_Y(point::geometry)::double precision AS latitude, fetched_at,
+       processed_at, freshness_status
+FROM history.vehicle_observations
+WHERE public_id=sqlc.arg(public_id)
+  AND processed_at >= sqlc.arg(from_at)
+  AND processed_at <= sqlc.arg(to_at)
+  AND (sqlc.narg(cursor_at)::timestamptz IS NULL OR processed_at < sqlc.narg(cursor_at)::timestamptz)
+ORDER BY processed_at DESC
+LIMIT sqlc.arg(row_limit);
+
 -- name: HasReadyVehicleData :one
 -- Readiness deliberately requires a valid snapshot and its corresponding
 -- successful source-health record. A database connection alone is not enough

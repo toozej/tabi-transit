@@ -1,8 +1,12 @@
 import { Link } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { formatDistance, serviceDayTime } from "@/domain/riderInfo";
+import {
+  formatDistance,
+  orderRouteStops,
+  serviceDayTime,
+} from "@/domain/riderInfo";
 import { formatFreshness } from "@/domain/vehicleModels";
 import { useSavedStore } from "@/state/savedStore";
 import {
@@ -11,6 +15,7 @@ import {
   useNearbyStops,
   useRoute,
   useRouteShape,
+  useRouteStops,
   useSchedule,
   useStaticManifest,
   useStop,
@@ -150,6 +155,13 @@ export function RouteView({ id }: { id: string }) {
   const route = useRoute(id);
   const shape = useRouteShape(id);
   const manifest = useStaticManifest();
+  const [directionId, setDirectionId] = useState<0 | 1 | undefined>();
+  const selectedDirection =
+    directionId ?? route.data?.directions[0]?.directionId;
+  const routeStops = useRouteStops(id, selectedDirection);
+  const displayedStops = routeStops.data
+    ? orderRouteStops(routeStops.data.stops)
+    : [];
   return (
     <State loading={route.isLoading} error={route.isError}>
       <ScrollView contentContainerStyle={styles.page}>
@@ -164,9 +176,47 @@ export function RouteView({ id }: { id: string }) {
               Directions
             </Text>
             {route.data.directions.map((direction) => (
-              <Text key={direction.directionId}>
-                {direction.headsign ?? `Direction ${direction.directionId}`}
+              <Pressable
+                key={direction.directionId}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected: selectedDirection === direction.directionId,
+                }}
+                onPress={() => setDirectionId(direction.directionId)}
+              >
+                <Text>
+                  {direction.headsign ?? `Direction ${direction.directionId}`}
+                </Text>
+              </Pressable>
+            ))}
+            <Text accessibilityRole="header" style={styles.subheading}>
+              Stops
+            </Text>
+            {routeStops.isLoading && (
+              <Text accessibilityLiveRegion="polite">Loading route stops.</Text>
+            )}
+            {routeStops.isError && (
+              <Text accessibilityRole="alert">
+                Route stops are unavailable. No incomplete route sequence is
+                shown.
               </Text>
+            )}
+            {displayedStops.map((stop) => (
+              <Link
+                key={stop.id}
+                href={{
+                  pathname: "/stop/[stopId]",
+                  params: { stopId: stop.id },
+                }}
+                asChild
+              >
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel={`Stop ${stop.sequence}: ${stop.name}`}
+                >
+                  <Text>{`${stop.sequence}. ${stop.name}`}</Text>
+                </Pressable>
+              </Link>
             ))}
             <Text>{formatFreshness(route.data.freshness)}</Text>
             {shape.data && (

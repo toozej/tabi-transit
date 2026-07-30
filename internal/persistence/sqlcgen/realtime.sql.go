@@ -413,6 +413,82 @@ func (q *Queries) ListStopSchedule(ctx context.Context, arg ListStopSchedulePara
 	return items, nil
 }
 
+const listVehicleHistory = `-- name: ListVehicleHistory :many
+SELECT source_id, public_id, source_vehicle_id, route_public_id, trip_public_id,
+       mode, ST_X(point::geometry)::double precision AS longitude,
+       ST_Y(point::geometry)::double precision AS latitude, fetched_at,
+       processed_at, freshness_status
+FROM history.vehicle_observations
+WHERE public_id=$1
+  AND processed_at >= $2
+  AND processed_at <= $3
+  AND ($4::timestamptz IS NULL OR processed_at < $4::timestamptz)
+ORDER BY processed_at DESC
+LIMIT $5
+`
+
+type ListVehicleHistoryParams struct {
+	PublicID string             `json:"public_id"`
+	FromAt   pgtype.Timestamptz `json:"from_at"`
+	ToAt     pgtype.Timestamptz `json:"to_at"`
+	CursorAt pgtype.Timestamptz `json:"cursor_at"`
+	RowLimit int32              `json:"row_limit"`
+}
+
+type ListVehicleHistoryRow struct {
+	SourceID        string                  `json:"source_id"`
+	PublicID        string                  `json:"public_id"`
+	SourceVehicleID string                  `json:"source_vehicle_id"`
+	RoutePublicID   pgtype.Text             `json:"route_public_id"`
+	TripPublicID    pgtype.Text             `json:"trip_public_id"`
+	Mode            TransitMode             `json:"mode"`
+	Longitude       float64                 `json:"longitude"`
+	Latitude        float64                 `json:"latitude"`
+	FetchedAt       pgtype.Timestamptz      `json:"fetched_at"`
+	ProcessedAt     pgtype.Timestamptz      `json:"processed_at"`
+	FreshnessStatus RealtimeFreshnessStatus `json:"freshness_status"`
+}
+
+// Observations are normalized positions, not a claim about schedule adherence.
+// A caller-enforced 30 day window keeps this read aligned with retention.
+func (q *Queries) ListVehicleHistory(ctx context.Context, arg ListVehicleHistoryParams) ([]ListVehicleHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listVehicleHistory,
+		arg.PublicID,
+		arg.FromAt,
+		arg.ToAt,
+		arg.CursorAt,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVehicleHistoryRow{}
+	for rows.Next() {
+		var i ListVehicleHistoryRow
+		if err := rows.Scan(
+			&i.SourceID,
+			&i.PublicID,
+			&i.SourceVehicleID,
+			&i.RoutePublicID,
+			&i.TripPublicID,
+			&i.Mode,
+			&i.Longitude,
+			&i.Latitude,
+			&i.FetchedAt,
+			&i.ProcessedAt,
+			&i.FreshnessStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const stopFeedTimezone = `-- name: StopFeedTimezone :one
 SELECT f.service_timezone
 FROM transit.stops s

@@ -53,9 +53,11 @@ export const itinerarySchema = z.object({
   transfers: z.number().int().nonnegative(),
   walkingMeters: z.number().int().nonnegative(),
   wheelchairAccessible: z.boolean().optional(),
-  source: z.literal("fixture-planner"),
+  // A fixture is the default, but a composed backend planner returns a
+  // normalized provider identifier. Provider payloads are never exposed here.
+  source: z.enum(["fixture-planner", "trimet-web-services"]),
   freshness: z.object({
-    status: z.enum(["fixture", "unknown"]),
+    status: z.enum(["fixture", "fresh", "unknown"]),
     message: z.string(),
   }),
   legs: z.array(itineraryLegSchema).min(1),
@@ -64,6 +66,7 @@ export const itinerarySchema = z.object({
 export type PlanEndpoint = z.infer<typeof planEndpointSchema>;
 export type PlannerConstraints = z.infer<typeof plannerConstraintsSchema>;
 export type PlannerDraft = z.infer<typeof plannerDraftSchema>;
+export type ItineraryLeg = z.infer<typeof itineraryLegSchema>;
 export type Itinerary = z.infer<typeof itinerarySchema>;
 
 export const defaultPlannerConstraints: PlannerConstraints = {

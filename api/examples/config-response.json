@@ -7,7 +7,7 @@
   },
   "sources": {
     "trimetGtfsRt": { "enabled": true },
-    "streetcar": { "enabled": false, "reason": "approval pending" }
+    "trimetStreetcar": { "enabled": true }
   },
   "pollingRecommendations": { "vehiclesSeconds": 15 },
   "staleThresholdSeconds": { "vehicles": 90 },

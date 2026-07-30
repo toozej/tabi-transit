@@ -7,11 +7,17 @@ import {
   type Vehicle,
   type VehicleCollection,
   type VehicleFilters,
+  type VehicleHistory,
   type VehicleSearch,
+  vehicleHistorySchema,
 } from "@/domain/vehicleModels";
 
 import { getApiRuntimeConfig, type ApiRuntimeConfig } from "./config";
-import { fixtureCollection, fixtureConfig } from "./fixtures";
+import {
+  fixtureCollection,
+  fixtureConfig,
+  fixtureVehicleHistory,
+} from "./fixtures";
 
 export class ApiError extends Error {
   constructor(
@@ -90,6 +96,26 @@ export class VehicleRepository {
         vehicleDetailSchema,
       )
     ).vehicle;
+  }
+
+  async history(id: string): Promise<VehicleHistory> {
+    if (this.runtime.apiMode === "fixture") {
+      return (
+        fixtureVehicleHistory[id] ?? {
+          vehicleId: id,
+          observations: [],
+          retentionDays: 30,
+          freshness: {
+            status: "historical",
+            source: "normalized-vehicle-observations",
+          },
+        }
+      );
+    }
+    return this.get(
+      `/v1/vehicles/${encodeURIComponent(id)}/history`,
+      vehicleHistorySchema,
+    );
   }
 
   private async get<T>(

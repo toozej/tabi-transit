@@ -201,6 +201,9 @@ type Arrival struct {
 	StopID, RouteID, TripID, VehicleID, Headsign string
 	ScheduledAt, EstimatedAt                     *time.Time
 	Status                                       string
+	// Streetcar preserves TriMet Arrivals V2's documented streetCar marker.
+	// The request and response remain within Tabi's TriMet source boundary.
+	Streetcar bool
 }
 type Route struct{ ID, ShortName, LongName string }
 type Stop struct {

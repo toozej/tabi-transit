@@ -135,7 +135,7 @@ func TestArrivalsMapsFixtureAndKeepsCredentialOutOfErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(arrivals) != 1 || arrivals[0].VehicleID != "2901" || arrivals[0].EstimatedAt == nil {
+	if len(arrivals) != 1 || arrivals[0].VehicleID != "2901" || arrivals[0].EstimatedAt == nil || !arrivals[0].Streetcar {
 		t.Fatalf("unexpected arrivals: %#v", arrivals)
 	}
 	if freshness.Source != SourceID || !freshness.IsRealtime || freshness.FetchedAt.IsZero() {

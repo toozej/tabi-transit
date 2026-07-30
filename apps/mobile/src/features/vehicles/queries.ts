@@ -9,6 +9,7 @@ export const vehicleQueryKeys = {
   vehicles: (filters: VehicleFilters) => ["vehicles", filters] as const,
   search: (query: string) => ["vehicle-search", query] as const,
   detail: (id?: string) => ["vehicle", id] as const,
+  history: (id?: string) => ["vehicle-history", id] as const,
 };
 
 export function useVehicleConfig() {
@@ -39,6 +40,14 @@ export function useVehicleDetail(id?: string) {
   return useQuery({
     queryKey: vehicleQueryKeys.detail(id),
     queryFn: () => vehicleRepository.vehicle(id ?? ""),
+    enabled: Boolean(id),
+  });
+}
+
+export function useVehicleHistory(id?: string) {
+  return useQuery({
+    queryKey: vehicleQueryKeys.history(id),
+    queryFn: () => vehicleRepository.history(id ?? ""),
     enabled: Boolean(id),
   });
 }

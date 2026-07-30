@@ -15,8 +15,6 @@ Do not stall unrelated work. Apply the default while collecting evidence.
 ## External decisions
 
 - **D-001 TriMet:** AppID, terms, rate, cache/retention/attribution, beta expectations. Default backend-only conservative official-source use.
-- **D-002 Streetcar:** canonical feed/API, ownership, UmoIQ relationship, terms, overlap. Default disabled/no scraping.
-- **D-003 Rose City Transit:** API/export, rights, rate, attribution/socials, history/advanced fields, change contact. Default optional reference only.
 - **D-004 Mapbox:** Search Box vs Geocoding, storage, scopes, telemetry/attribution, offline/cache, budget. Default no unapproved persistent geocoder storage.
 
 ## Architecture decisions
@@ -48,7 +46,7 @@ Do not stall unrelated work. Apply the default while collecting evidence.
 | Expo/RNMapbox incompatibility | map blocked | Phase 0 device/version proof |
 | Community wrapper maintenance | upgrade/security | adapter isolation, release monitoring, native fallback ADR |
 | Upstream quota/schema | missing data | backend caches/adapters/fixtures/health/flags |
-| No Streetcar API | scope gap | gate and pursue official source |
+| TriMet Streetcar coverage changes | scope/data-quality gap | TriMet source health, mode classification, and D-001 review |
 | Mapbox cost | financial | scopes, budgets, usage/cost metrics |
 | Vitest RN instability | component gap | proof, pure logic separation, Maestro fallback ADR |
 | GTFS↔RT ID mismatch | incorrect joins | mappings/diagnostics/unmatched preservation |

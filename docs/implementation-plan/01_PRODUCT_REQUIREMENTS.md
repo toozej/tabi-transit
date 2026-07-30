@@ -62,7 +62,7 @@ Tabi helps riders find, understand, and navigate Portland-area transit using sch
 
 **FR-034 — Staleness.** Clearly show age; never animate stale data as current.
 
-**FR-035 — Streetcar.** Add only after a canonical feed or written agreement; do not scrape a public map by default.
+**FR-035 — Streetcar.** Support Streetcar data supplied by TriMet's official GTFS, GTFS-Realtime, and Arrivals V2 interfaces; do not add a direct public-map scraper or imply a Portland Streetcar partnership.
 
 **FR-036 — Specialist views.** Optional post-MVP SystemMapper-inspired service status, block/trip exploration, adherence, and history/heatmap screens, independently gated by rights and data.
 
@@ -92,7 +92,7 @@ Tabi helps riders find, understand, and navigate Portland-area transit using sch
 
 ### Credits/legal
 
-**FR-070 — Credits.** Verified TriMet, Rose City Transit (after approval), Portland Streetcar/source provider, Mapbox, Expo, React Native, `@rnmapbox/maps`, Go, GTFS, and material open-source attribution; privacy, terms, and licenses.
+**FR-070 — Credits.** Verified TriMet attribution (including its Streetcar-provided coverage), Mapbox, Expo, React Native, `@rnmapbox/maps`, Go, GTFS, and material open-source attribution; privacy, terms, and licenses. Do not imply a Rose City partnership.
 
 **FR-071 — Map compliance.** Preserve Mapbox logo/attribution unless an approved equivalent is compliant; expose required telemetry/anonymous usage control.
 
@@ -148,7 +148,7 @@ Measured on a representative mid-range supported device:
 9. Credits/privacy/attribution.
 10. Production CI/CD, monitoring, backups, and store release.
 
-Streetcar, specialist views, push, history, and OpenTripPlanner are post-MVP unless approvals and capacity make them low-risk.
+Specialist views, push, history, and OpenTripPlanner are post-MVP unless approvals and capacity make them low-risk. TriMet-provided Streetcar coverage follows the normal TriMet source gate.
 
 ## Release gate
 

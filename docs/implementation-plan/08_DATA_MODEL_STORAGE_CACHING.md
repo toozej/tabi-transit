@@ -46,7 +46,11 @@ Source-qualified opaque IDs such as `trimet:stop:12345`, `trimet:route:20`, `tri
 
 ## History
 
-MVP keeps current state plus a short debugging window. Longer vehicle/history/heatmap storage requires ADR covering purpose, rights, cost, retention, partitions, aggregates, and privacy. If enabled, partition by date, deduplicate unchanged points, aggregate old data, and automate deletion.
+ADR-0013 retains normalized vehicle observations for 30 days. Each accepted
+snapshot records the normalized projection only (never the raw provider
+payload), and the writer deletes observations older than 30 days in the same
+transaction. Rider-visible history/heatmap APIs remain a later contract; any
+retention-duration change requires an ADR and matching migration/test update.
 
 ## Cache layers
 
@@ -91,7 +95,11 @@ Phase 1 profiles size, bandwidth, migration, licensing, and file-swap safety. JS
 
 ## Retention baseline
 
-Configuration/legal approval sets exact values. Initial direction: source metadata 90 days; active/prior GTFS archives plus policy history; raw GTFS-RT disabled or short; current snapshots until replaced; short vehicle debugging; alert revisions sufficient for dedupe; short redacted access logs; notification deliveries 30–90 days; prompt purge on installation deletion.
+Configuration/legal approval sets exact values. Vehicle observations: 30 days
+under ADR-0013; source metadata: 90 days; active/prior GTFS archives plus
+policy history; raw GTFS-RT disabled; current snapshots until replaced; alert
+revisions sufficient for dedupe; short redacted access logs; notification
+deliveries remain subject to D-018; prompt purge on installation deletion.
 
 ## Backup/restore
 

@@ -63,6 +63,23 @@ func (r *PostgresReader) ListCurrentVehicles(ctx context.Context, filter Vehicle
 	return vehicles, nil
 }
 
+func (r *PostgresReader) ListVehicleHistory(ctx context.Context, filter VehicleHistoryFilter) ([]VehicleObservation, error) {
+	if filter.VehicleID == "" || filter.From.IsZero() || filter.To.IsZero() || filter.Limit < 1 {
+		return nil, errors.New("invalid vehicle history filter")
+	}
+	rows, err := r.queries.ListVehicleHistory(ctx, sqlcgen.ListVehicleHistoryParams{
+		PublicID: filter.VehicleID, FromAt: pgtype.Timestamptz{Time: filter.From, Valid: true}, ToAt: pgtype.Timestamptz{Time: filter.To, Valid: true}, CursorAt: timestampValue(filter.Cursor), RowLimit: int32(filter.Limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]VehicleObservation, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, VehicleObservation{VehicleID: row.PublicID, SourceID: row.SourceID, SourceVehicleID: row.SourceVehicleID, RouteID: textPtr(row.RoutePublicID), TripID: textPtr(row.TripPublicID), Mode: string(row.Mode), Coordinate: Coordinate{Longitude: row.Longitude, Latitude: row.Latitude}, ObservedAt: timestamp(row.ProcessedAt), FetchedAt: timestamp(row.FetchedAt), Freshness: FreshnessStatus(row.FreshnessStatus)})
+	}
+	return items, nil
+}
+
 func (r *PostgresReader) ListNearbyStops(ctx context.Context, filter NearbyStopsFilter) ([]NearbyStop, error) {
 	wheelchair := pgtype.Bool{}
 	if filter.WheelchairAccessible != nil {
@@ -447,6 +464,12 @@ func timestampPtr(value pgtype.Timestamptz) *time.Time {
 	}
 	result := value.Time
 	return &result
+}
+func timestampValue(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *value, Valid: true}
 }
 func text(value pgtype.Text) string { return value.String }
 func textPtr(value pgtype.Text) *string {

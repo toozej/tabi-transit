@@ -20,6 +20,27 @@ type fakeVehicles struct {
 	err   error
 }
 
+type fakeJourneyPlanner struct {
+	request application.JourneyRequest
+	plan    application.JourneyPlan
+}
+
+func (f *fakeJourneyPlanner) Plan(_ context.Context, request application.JourneyRequest) (application.JourneyPlan, error) {
+	f.request = request
+	return f.plan, nil
+}
+
+type fakeVehicleHistory struct {
+	items []persistence.VehicleObservation
+	err   error
+	query persistence.VehicleHistoryFilter
+}
+
+func (f *fakeVehicleHistory) ListVehicleHistory(_ context.Context, q persistence.VehicleHistoryFilter) ([]persistence.VehicleObservation, error) {
+	f.query = q
+	return f.items, f.err
+}
+
 func (f fakeVehicles) ListCurrentVehicles(context.Context, persistence.VehicleFilter) ([]persistence.Vehicle, error) {
 	return f.items, f.err
 }
@@ -120,6 +141,66 @@ func TestVehicleEndpointsConformToCoreContract(t *testing.T) {
 		t.Fatalf("detail: %d %s", w.Code, w.Body.String())
 	}
 }
+
+func TestRequestIDOnlyPropagatesSafeCorrelationTokens(t *testing.T) {
+	h := testServer(t, fakeVehicles{items: []persistence.Vehicle{vehicle()}})
+	valid := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	valid.RemoteAddr = "198.51.100.7:123"
+	valid.Header.Set("X-Request-Id", "mobile.release_42-abc")
+	validResponse := httptest.NewRecorder()
+	h.ServeHTTP(validResponse, valid)
+	if got := validResponse.Header().Get("X-Request-Id"); got != "mobile.release_42-abc" || !strings.Contains(validResponse.Body.String(), `"requestId":"mobile.release_42-abc"`) {
+		t.Fatalf("valid request ID was not propagated: header=%q body=%s", got, validResponse.Body.String())
+	}
+
+	for _, id := range []string{"mobile session", "trace/42", "<script>", strings.Repeat("a", 129)} {
+		r := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+		r.RemoteAddr = "198.51.100.7:123"
+		r.Header.Set("X-Request-Id", id)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		got := w.Header().Get("X-Request-Id")
+		if got == id || !validRequestIDForTest(got) || !strings.Contains(w.Body.String(), `"requestId":"`+got+`"`) {
+			t.Fatalf("unsafe request ID %q produced header=%q body=%s", id, got, w.Body.String())
+		}
+	}
+}
+
+func validRequestIDForTest(id string) bool {
+	if !strings.HasPrefix(id, "req_") || len(id) > 128 {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-", r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestVehicleHistoryIsBoundedAndPaginated(t *testing.T) {
+	at := time.Date(2026, 7, 28, 16, 30, 2, 0, time.UTC)
+	route := "fixture:route:20"
+	history := &fakeVehicleHistory{items: []persistence.VehicleObservation{{VehicleID: "fixture:vehicle:2901", SourceID: "fixture-rt", SourceVehicleID: "2901", RouteID: &route, Mode: "bus", Coordinate: persistence.Coordinate{Longitude: -122.67, Latitude: 45.52}, ObservedAt: at, FetchedAt: at, Freshness: persistence.FreshnessFresh}}}
+	c := config.Config{API: config.PublicAPI{Version: "0.1.0"}, RateLimit: config.RateLimit{Requests: 20, Window: time.Hour}}
+	h := api.New(application.Service{Catalog: fakeCatalog{}, Vehicles: fakeVehicles{}, History: history}, c)
+	w := request(h, "/v1/vehicles/fixture:vehicle:2901/history?from=2026-07-28T15:00:00Z&to=2026-07-28T17:00:00Z&limit=1")
+	if w.Code != http.StatusOK || w.Header().Get("ETag") == "" || !strings.Contains(w.Body.String(), `"retentionDays":30`) || !strings.Contains(w.Body.String(), `"nextCursor"`) {
+		t.Fatalf("history response = %d %s", w.Code, w.Body.String())
+	}
+	if history.query.VehicleID != "fixture:vehicle:2901" || history.query.Limit != 1 || !history.query.From.Equal(time.Date(2026, 7, 28, 15, 0, 0, 0, time.UTC)) {
+		t.Fatalf("history query = %#v", history.query)
+	}
+	for _, path := range []string{
+		"/v1/vehicles/fixture:route:20/history",
+		"/v1/vehicles/fixture:vehicle:2901/history?from=2026-06-01T00:00:00Z&to=2026-07-28T00:00:01Z",
+		"/v1/vehicles/fixture:vehicle:2901/history?limit=501",
+	} {
+		if got := request(h, path); got.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d", path, got.Code)
+		}
+	}
+}
 func TestETagValidationAndBadInput(t *testing.T) {
 	h := testServer(t, fakeVehicles{items: []persistence.Vehicle{vehicle()}})
 	first := request(h, "/v1/config")
@@ -144,6 +225,30 @@ func TestETagValidationAndBadInput(t *testing.T) {
 		t.Fatalf("bad ID: %d", w.Code)
 	}
 }
+func TestVehicleBoundingBoxFilterAndValidation(t *testing.T) {
+	inside := vehicle()
+	outside := vehicle()
+	outside.ID = "fixture:vehicle:2902"
+	outside.SourceVehicleID = "2902"
+	outside.Coordinate = persistence.Coordinate{Longitude: -122.40, Latitude: 45.80}
+	h := testServer(t, fakeVehicles{items: []persistence.Vehicle{inside, outside}})
+
+	w := request(h, "/v1/vehicles?bbox=-122.68,45.51,-122.66,45.53")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"fixture:vehicle:2901"`) || strings.Contains(w.Body.String(), `"fixture:vehicle:2902"`) {
+		t.Fatalf("bbox filter response = %d %s", w.Code, w.Body.String())
+	}
+
+	for _, path := range []string{
+		"/v1/vehicles?bbox=-122.68,45.51,-122.66",
+		"/v1/vehicles?bbox=-181,45.51,-122.66,45.53",
+		"/v1/vehicles?bbox=-122.66,45.53,-122.68,45.51",
+	} {
+		if got := request(h, path); got.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d, want 400", path, got.Code)
+		}
+	}
+}
+
 func TestUnavailableAndRateLimit(t *testing.T) {
 	h := testServer(t, fakeVehicles{err: errors.New("database unavailable")})
 	w := request(h, "/v1/vehicles")
@@ -164,9 +269,15 @@ func TestPhaseThreeFeatureGatesFailClosed(t *testing.T) {
 			Enabled bool   `json:"enabled"`
 			Reason  string `json:"reason"`
 		} `json:"features"`
+		Sources map[string]struct {
+			Enabled bool `json:"enabled"`
+		} `json:"sources"`
 	}
-	if err := json.Unmarshal(config.Body.Bytes(), &configResponse); err != nil || configResponse.Features["placeSearch"].Enabled || configResponse.Features["journeyPlanner"].Enabled || configResponse.Features["placeSearch"].Reason != "external_provider_gate_pending" {
+	if err := json.Unmarshal(config.Body.Bytes(), &configResponse); err != nil || configResponse.Features["placeSearch"].Enabled || configResponse.Features["journeyPlanner"].Enabled || configResponse.Features["placeSearch"].Reason != "external_provider_gate_pending" || !configResponse.Sources["trimetStreetcar"].Enabled {
 		t.Fatalf("feature config = %#v, err=%v", configResponse.Features, err)
+	}
+	if _, ok := configResponse.Sources["roseCityTransit"]; ok {
+		t.Fatalf("Rose City must not be exposed as a separate source: %#v", configResponse.Sources)
 	}
 	for _, tc := range []struct {
 		method string
@@ -191,6 +302,31 @@ func TestPhaseThreeFeatureGatesFailClosed(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.Error.Code != "feature_unavailable" {
 			t.Fatalf("%s %s response = %s, err=%v", tc.method, tc.path, w.Body.String(), err)
 		}
+	}
+}
+
+func TestJourneyPlannerParsesNormalizedRequestAndReturnsPlan(t *testing.T) {
+	depart := time.Date(2026, 7, 28, 18, 30, 0, 0, time.UTC)
+	planner := &fakeJourneyPlanner{plan: application.JourneyPlan{PlanID: "fixture-plan", Provider: "trimet-web-services", Freshness: application.PlannerFreshness{Source: "trimet-web-services", FetchedAt: depart, ProcessedAt: depart, IsRealtime: true}, Itineraries: []application.Itinerary{{ID: "fixture-plan:1", DurationSeconds: 600, Transfers: 0, Legs: []application.JourneyLeg{{Mode: "bus", RouteID: "20"}}}}}}
+	c := config.Config{API: config.PublicAPI{Version: "0.1.0", MinimumAppVersion: "0.1.0"}, RateLimit: config.RateLimit{Requests: 20, Window: time.Hour}}
+	h := api.New(application.Service{Planning: application.PlanningFeatures{Planner: planner}}, c)
+	body := `{"origin":{"type":"coordinate","coordinate":[-122.67,45.52]},"destination":{"type":"stop","stopId":"trimet:stop:8334"},"time":{"mode":"depart_at","value":"2026-07-28T18:30:00Z"},"preferences":{"modes":["bus"],"maxTransfers":1}}`
+	r := httptest.NewRequest(http.MethodPost, "/v1/journeys/plan", strings.NewReader(body))
+	r.RemoteAddr = "198.51.100.7:123"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"planId":"fixture-plan"`) || !strings.Contains(w.Body.String(), `"source":"trimet-web-services"`) {
+		t.Fatalf("response = %d %s", w.Code, w.Body.String())
+	}
+	if planner.request.Origin.Coordinate == nil || planner.request.Origin.Coordinate.Longitude != -122.67 || planner.request.Destination.ID != "trimet:stop:8334" || planner.request.Time == nil || !planner.request.Time.Value.Equal(depart) {
+		t.Fatalf("planner request = %#v", planner.request)
+	}
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/v1/journeys/plan", strings.NewReader(`{"origin":{}}`))
+	r.RemoteAddr = "198.51.100.7:123"
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid body = %d %s", w.Code, w.Body.String())
 	}
 }
 

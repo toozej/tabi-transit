@@ -22,7 +22,7 @@ Review this register when adding a provider, public endpoint, persistence of
 user/device data, analytics, maps/search capability, or a production deployment.
 Every new externally sourced fixture must comply with the fixture policy.
 
-The following remains intentionally unresolved: D-001 (TriMet terms/AppID),
-D-004 (Mapbox product/terms/storage/telemetry/budget), D-016 (host/backup/DNS),
-and physical Android/iOS/Maestro evidence. None is inferred from local source
-files or a configured local environment.
+The following remains intentionally unresolved: D-004 (Mapbox
+product/terms/storage/telemetry/budget), D-016 (host/backup/DNS), and physical
+Android/iOS/Maestro evidence. None is inferred from local source files or a
+configured local environment.

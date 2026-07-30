@@ -667,6 +667,42 @@ paths:
         "304": { $ref: "#/components/responses/NotModified" }
         "404": { $ref: "#/components/responses/NotFound" }
         default: { $ref: "#/components/responses/ErrorResponse" }
+  /v1/vehicles/{id}/history:
+    get:
+      tags: [Vehicles]
+      operationId: getVehicleHistory
+      summary: Get up to 30 days of normalized vehicle observations.
+      description: Historical positions are normalized observations, not inferred schedule adherence.
+      parameters:
+        - { $ref: "#/components/parameters/VehicleId" }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: cursor
+          in: query
+          description: Exclusive observation timestamp returned as `nextCursor`.
+          schema: { type: string, format: date-time }
+        - { $ref: "#/components/parameters/IfNoneMatch" }
+      responses:
+        "200":
+          description: A bounded reverse-chronological page of observations.
+          headers:
+            {
+              ETag: { $ref: "#/components/headers/ETag" },
+              X-Request-Id: { $ref: "#/components/headers/RequestId" },
+            }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleHistoryResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "304": { $ref: "#/components/responses/NotModified" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
   /v1/search:
     get:
       tags: [Search]
@@ -753,8 +789,8 @@ paths:
       description: |
         Provider responses are normalized before they leave the backend. Unsupported
         preferences are disclosed in `unsupportedPreferences`; hard constraints are
-        enforced or the request returns no itineraries. The planner remains disabled
-        until the TriMet AppID and terms/rate/cache/attribution decision gate passes.
+        enforced or the request returns no itineraries. Availability is reported by
+        `/v1/config` and requires the server-side TriMet planner configuration.
       requestBody:
         required: true
         content:
@@ -1792,6 +1828,37 @@ components:
         required: [vehicle],
         properties: { vehicle: { $ref: "#/components/schemas/Vehicle" } },
       }
+    VehicleObservation:
+      type: object
+      required: [coordinate, observedAt, mode, freshness]
+      properties:
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+        observedAt: { type: string, format: date-time }
+        routeId: { $ref: "#/components/schemas/QualifiedId" }
+        tripId: { $ref: "#/components/schemas/QualifiedId" }
+        mode: { $ref: "#/components/schemas/TransitMode" }
+        freshness:
+          type: object
+          required: [status, fetchedAt]
+          properties:
+            status: { $ref: "#/components/schemas/FreshnessStatus" }
+            fetchedAt: { type: string, format: date-time }
+    VehicleHistoryResponse:
+      type: object
+      required: [vehicleId, observations, retentionDays, freshness]
+      properties:
+        vehicleId: { $ref: "#/components/schemas/QualifiedId" }
+        observations:
+          type: array
+          items: { $ref: "#/components/schemas/VehicleObservation" }
+        nextCursor: { type: string, format: date-time }
+        retentionDays: { type: integer, enum: [30] }
+        freshness:
+          type: object
+          required: [status, source]
+          properties:
+            status: { type: string, enum: [historical] }
+            source: { type: string, enum: [normalized-vehicle-observations] }
     PlaceKind:
       {
         type: string,
@@ -2377,7 +2444,7 @@ components:
             sources:
               {
                 trimetGtfsRt: { enabled: true },
-                streetcar: { enabled: false, reason: approval pending },
+                trimetStreetcar: { enabled: true },
               },
             pollingRecommendations: { vehiclesSeconds: 15 },
             staleThresholdSeconds: { vehicles: 90 },

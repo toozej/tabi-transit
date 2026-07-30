@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap format format-check lint typecheck test test-unit test-integration test-e2e test-race test-load test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor
+.PHONY: help bootstrap format format-check lint typecheck test test-unit test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor
 GO_CACHE_DIR := $(CURDIR)/.cache/go-build
 
 help: ## Display available Make targets
@@ -34,6 +34,9 @@ test-integration: ## Run deterministic cross-component integration checks
 	@# do not require developer or production secrets for deterministic tests.
 	@tests/integration/run.sh
 
+test-db-migrations: ## Run disposable PostGIS migration and retention checks
+	@db/test-migrations.sh
+
 test-e2e: ## Run Maestro mobile end-to-end tests
 	@command -v maestro >/dev/null || { echo 'Maestro CLI is required for mobile E2E tests; see docs/runbooks/local-development.md'; exit 1; }
 	@test -d tests/e2e/maestro || { echo 'Maestro flows are not present yet (WP-08/WP-16)'; exit 1; }
@@ -46,6 +49,12 @@ test-load: ## Run k6 load tests
 	@command -v k6 >/dev/null || { echo 'k6 is required for load tests; see docs/runbooks/local-development.md'; exit 1; }
 	@test -d tests/load || { echo 'load test scripts are not present yet (WP-16)'; exit 1; }
 	@k6 run tests/load/*.js
+
+test-history-benchmark: ## Measure the maximum bounded vehicle-history API page locally
+	@GOCACHE=$(GO_CACHE_DIR) go test ./internal/api -run '^$$' -bench '^BenchmarkVehicleHistoryMaximumPage$$' -benchmem -count=5
+
+test-vehicle-payload-benchmark: ## Compare compact vehicle JSON and GeoJSON serialization locally
+	@node tests/performance/vehicle_geojson_payload.mjs
 
 # Explicit opt-in only: sources the user's trusted local .env without printing
 # it, then performs one read-only TriMet Arrivals V2 compatibility request.

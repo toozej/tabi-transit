@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { fixturePlanEndpoints } from "@/data/api/plannerFixtures";
 import {
@@ -12,6 +19,7 @@ import {
   type Itinerary,
   type PlanEndpoint,
 } from "@/domain/tripPlanning";
+import { createExternalWalkingDirectionsLink } from "@/domain/externalDirections";
 import { usePlannerStore } from "@/state/plannerStore";
 
 function EndpointPicker({
@@ -53,22 +61,35 @@ function ItineraryTimeline({ itinerary }: { itinerary: Itinerary }) {
       <Text accessibilityRole="header" style={styles.subheading}>
         {`${Math.round(itinerary.durationSeconds / 60)} min · ${itinerary.transfers} transfer${itinerary.transfers === 1 ? "" : "s"} · ${itinerary.walkingMeters} m walking`}
       </Text>
-      {itinerary.legs.map((leg) => (
-        <View key={leg.id} style={styles.leg}>
-          <Text accessibilityRole="header">
-            {leg.routeLabel ?? (leg.mode === "walk" ? "Walk" : leg.mode)}
-          </Text>
-          <Text>{`${leg.startLabel} to ${leg.endLabel}`}</Text>
-          {leg.headsign && <Text>{`Toward ${leg.headsign}`}</Text>}
-          <Text>{`Status: ${leg.realtime}`}</Text>
-          {leg.geometry && (
-            <Text>
-              Map geometry is prepared for this leg; this text timeline is an
-              equivalent way to follow it.
+      {itinerary.legs.map((leg) => {
+        const walkingDirections = createExternalWalkingDirectionsLink(leg);
+        return (
+          <View key={leg.id} style={styles.leg}>
+            <Text accessibilityRole="header">
+              {leg.routeLabel ?? (leg.mode === "walk" ? "Walk" : leg.mode)}
             </Text>
-          )}
-        </View>
-      ))}
+            <Text>{`${leg.startLabel} to ${leg.endLabel}`}</Text>
+            {leg.headsign && <Text>{`Toward ${leg.headsign}`}</Text>}
+            <Text>{`Status: ${leg.realtime}`}</Text>
+            {leg.geometry && (
+              <Text>
+                Map geometry is prepared for this leg; this text timeline is an
+                equivalent way to follow it.
+              </Text>
+            )}
+            {walkingDirections && (
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Open walking directions from ${leg.startLabel} to ${leg.endLabel} in your maps app`}
+                onPress={() => void Linking.openURL(walkingDirections)}
+                style={styles.button}
+              >
+                <Text>Open walking directions</Text>
+              </Pressable>
+            )}
+          </View>
+        );
+      })}
       <Text>{itinerary.freshness.message}</Text>
     </View>
   );
@@ -96,7 +117,9 @@ export function PlannerView() {
       setItineraries(result);
       setMessage(
         result.length > 0
-          ? "Fixture result. Provider-backed trip planning is currently disabled."
+          ? result[0]?.source === "fixture-planner"
+            ? "Fixture result. Provider-backed trip planning is currently disabled."
+            : "Trip plan from the configured Tabi service."
           : (ranked.disclosure ??
               "No fixture itinerary meets these constraints. Relax a filter."),
       );
@@ -116,7 +139,7 @@ export function PlannerView() {
         Plan a trip
       </Text>
       <Text>
-        This fixture-only planner does not call Mapbox or a transit provider.
+        This planner never calls Mapbox or a transit provider directly.
       </Text>
       {locationPermission === "denied" ? (
         <Text accessibilityRole="alert">

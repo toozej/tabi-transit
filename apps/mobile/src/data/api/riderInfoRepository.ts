@@ -4,6 +4,7 @@ import {
   nearbyStopsSchema,
   routeDetailSchema,
   routeShapeSchema,
+  routeStopCollectionSchema,
   scheduleSchema,
   staticManifestSchema,
   stopDetailSchema,
@@ -12,6 +13,7 @@ import {
   type NearbyStops,
   type RouteDetail,
   type RouteShape,
+  type RouteStopCollection,
   type Schedule,
   type StaticManifest,
   type Stop,
@@ -26,6 +28,7 @@ import {
   fixtureNearby,
   fixtureRoute,
   fixtureRouteShape,
+  fixtureRouteStops,
   fixtureSchedule,
   fixtureStops,
 } from "./riderInfoFixtures";
@@ -72,6 +75,27 @@ export class RiderInfoRepository {
     return this.get(
       `/v1/routes/${encodeURIComponent(id)}/shape`,
       routeShapeSchema,
+    );
+  }
+  async routeStops(
+    id: string,
+    directionId?: 0 | 1,
+  ): Promise<RouteStopCollection> {
+    if (this.runtime.apiMode === "fixture") {
+      const collection = fixtureRouteStops.find(
+        (item) =>
+          item.routeId === id &&
+          (directionId === undefined || item.directionId === directionId),
+      );
+      if (!collection)
+        throw new ApiError("Route stops were not found.", "http");
+      return collection;
+    }
+    const query =
+      directionId === undefined ? "" : `?directionId=${directionId}`;
+    return this.get(
+      `/v1/routes/${encodeURIComponent(id)}/stops${query}`,
+      routeStopCollectionSchema,
     );
   }
   async schedule(stopId: string): Promise<Schedule> {
