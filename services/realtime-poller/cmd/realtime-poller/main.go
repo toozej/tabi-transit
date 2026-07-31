@@ -50,16 +50,21 @@ func main() {
 	}
 	defer pool.Close()
 	service := poller.Service{Config: pollConfig, Store: persistence.PostgresRealtimeWriter{DB: pool}}
-	errCh := make(chan error, 2)
-	if pollConfig.Endpoint != "" {
-		go func() { errCh <- service.RunLoop(ctx) }()
-	}
-	if pollConfig.TripUpdatesEndpoint != "" {
-		go func() { errCh <- service.RunTripUpdatesLoop(ctx) }()
-	}
+	errCh := startLoops(ctx, pollConfig, service.RunLoop, service.RunTripUpdatesLoop)
 	slog.Info("starting realtime poller", "vehiclePositionsConfigured", pollConfig.Endpoint != "", "tripUpdatesConfigured", pollConfig.TripUpdatesEndpoint != "")
 	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 		slog.Error("realtime poller stopped", "error", err.Error())
 		os.Exit(1)
 	}
+}
+
+func startLoops(ctx context.Context, c poller.Config, runVehicles, runTripUpdates func(context.Context) error) <-chan error {
+	errCh := make(chan error, 2)
+	if c.Endpoint != "" {
+		go func() { errCh <- runVehicles(ctx) }()
+	}
+	if c.TripUpdatesEndpoint != "" {
+		go func() { errCh <- runTripUpdates(ctx) }()
+	}
+	return errCh
 }

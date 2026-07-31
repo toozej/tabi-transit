@@ -9,9 +9,13 @@ import (
 )
 
 func main() {
-	s := importer.Service{Config: importer.Config{SourceID: os.Getenv("GTFS_SOURCE_ID"), Endpoint: os.Getenv("GTFS_ENDPOINT"), EndpointFile: os.Getenv("GTFS_ENDPOINT_FILE"), AllowedHosts: []string{os.Getenv("GTFS_ALLOWED_HOST")}, Timeout: 30 * time.Second, Policy: importer.DefaultPolicy()}}
+	s := newService(os.Getenv)
 	if err := s.Run(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func newService(getenv func(string) string) importer.Service {
+	return importer.Service{Config: importer.Config{SourceID: getenv("GTFS_SOURCE_ID"), Endpoint: getenv("GTFS_ENDPOINT"), EndpointFile: getenv("GTFS_ENDPOINT_FILE"), AllowedHosts: []string{getenv("GTFS_ALLOWED_HOST")}, Timeout: 30 * time.Second, Policy: importer.DefaultPolicy()}}
 }

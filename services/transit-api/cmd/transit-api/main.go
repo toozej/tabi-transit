@@ -72,14 +72,7 @@ func main() {
 			return reader.Ready(ctx)
 		}))
 	}
-	server := &http.Server{
-		Addr:              c.ListenAddress,
-		Handler:           api.New(service, c, options...),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	server := newServer(c, service, options...)
 	shutdown, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
@@ -99,5 +92,16 @@ func main() {
 			slog.Error("API shutdown failed", "error", err.Error())
 			os.Exit(1)
 		}
+	}
+}
+
+func newServer(c config.Config, service application.Service, options ...api.Option) *http.Server {
+	return &http.Server{
+		Addr:              c.ListenAddress,
+		Handler:           api.New(service, c, options...),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 }
