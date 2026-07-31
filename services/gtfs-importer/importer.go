@@ -97,10 +97,7 @@ func (s Service) Run(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	client := s.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: config.Timeout}
-	}
+	client := s.client(config)
 	resp, e := client.Do(req)
 	if e != nil {
 		return s.fail(ctx, "fetch_failed", now, e)
@@ -128,6 +125,31 @@ func (s Service) Run(ctx context.Context) error {
 	}
 	_ = active
 	return nil
+}
+
+// client validates redirects as well as the configured endpoint. This keeps a
+// trusted feed host from redirecting an importer into an internal network.
+func (s Service) client(config Config) *http.Client {
+	base := s.HTTPClient
+	if base == nil {
+		base = &http.Client{Timeout: config.Timeout}
+	}
+	copy := *base
+	copy.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if req.URL.Scheme != "https" || !allowedHost(req.URL.Hostname(), config.AllowedHosts) {
+			return errors.New("redirect target is not an allowlisted HTTPS host")
+		}
+		return nil
+	}
+	return &copy
+}
+func allowedHost(host string, allowed []string) bool {
+	for _, value := range allowed {
+		if strings.EqualFold(host, strings.TrimSpace(value)) {
+			return true
+		}
+	}
+	return false
 }
 func (s Service) fail(ctx context.Context, code string, at func() time.Time, err error) error {
 	if s.Store != nil {

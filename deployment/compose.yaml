@@ -74,6 +74,10 @@ services:
     environment:
       <<: *backend-environment
       TRIMET_APP_ID_FILE: /run/secrets/trimet_app_id
+      GTFSRT_SOURCE_ID: ${GTFSRT_SOURCE_ID:-trimet}
+      GTFSRT_VEHICLE_ENDPOINT: ${GTFSRT_VEHICLE_ENDPOINT:?set the approved GTFS-Realtime vehicle endpoint}
+      GTFSRT_TRIP_UPDATES_ENDPOINT: ${GTFSRT_TRIP_UPDATES_ENDPOINT:-}
+      GTFSRT_ALLOWED_HOSTS: ${GTFSRT_ALLOWED_HOSTS:?set the approved GTFS-Realtime hostname allowlist}
     secrets:
       - postgres_password
       - database_url

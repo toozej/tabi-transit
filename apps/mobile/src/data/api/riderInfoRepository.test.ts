@@ -8,14 +8,14 @@ const fixtureRuntime = {
 describe("RiderInfoRepository", () => {
   it("keeps the per-mode nearby limit independent", async () => {
     const repository = new RiderInfoRepository(fixtureRuntime, vi.fn());
-    const result = await repository.nearby(1);
+    const result = await repository.nearby(undefined, 1);
     expect(result.groups).toHaveLength(2);
     expect(result.groups.every((group) => group.stops.length <= 1)).toBe(true);
   });
   it("offers fixture schedules after midnight and a Mapbox-consumable route shape", async () => {
     const repository = new RiderInfoRepository(fixtureRuntime, vi.fn());
     expect(
-      (await repository.schedule("fixture:stop:101")).schedule[0]
+      (await repository.schedule("fixture:stop:101", "2026-07-23")).schedule[0]
         ?.serviceDaySeconds,
     ).toBe(90_060);
     expect(
@@ -82,7 +82,93 @@ describe("RiderInfoRepository", () => {
         ),
       ),
     );
-    await expect(repository.nearby()).rejects.toMatchObject({
+    await expect(
+      repository.nearby({ latitude: 45.52, longitude: -122.68 }),
+    ).rejects.toMatchObject({
+      kind: "invalid_response",
+    });
+  });
+
+  it("sends the caller's coordinate and contract parameter names for nearby stops", async () => {
+    const request = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          distanceType: "straight_line",
+          groups: [],
+          freshness: {
+            source: "static",
+            fetchedAt: "2026-07-23T00:00:00Z",
+            processedAt: "2026-07-23T00:00:00Z",
+            status: "fresh",
+            ageSeconds: 1,
+            isRealtime: false,
+          },
+        }),
+      ),
+    );
+    const repository = new RiderInfoRepository(
+      { apiMode: "remote", apiBaseUrl: "https://api.example.test" },
+      request,
+    );
+
+    await repository.nearby({ latitude: 47.6062, longitude: -122.3321 }, 2);
+    expect(request).toHaveBeenCalledWith(
+      "https://api.example.test/v1/stops/nearby?lat=47.6062&lon=-122.3321&limitPerMode=2",
+    );
+  });
+
+  it("does not send invalid nearby coordinates to the API", async () => {
+    const request = vi.fn();
+    const repository = new RiderInfoRepository(
+      { apiMode: "remote", apiBaseUrl: "https://api.example.test" },
+      request,
+    );
+    await expect(
+      repository.nearby({ latitude: Number.NaN, longitude: -122.68 }),
+    ).rejects.toMatchObject({ kind: "http" });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("includes the required service date and rejects unrelated fixture resources", async () => {
+    const request = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          stopId: "x",
+          serviceDate: "2026-07-23",
+          staticFeedVersion: "v1",
+          schedule: [],
+        }),
+      ),
+    );
+    const remote = new RiderInfoRepository(
+      { apiMode: "remote", apiBaseUrl: "https://api.example.test" },
+      request,
+    );
+    await remote.schedule("trimet:stop:1", "2026-07-23");
+    expect(request).toHaveBeenCalledWith(
+      "https://api.example.test/v1/stops/trimet%3Astop%3A1/schedule?serviceDate=2026-07-23",
+    );
+
+    const fixture = new RiderInfoRepository(fixtureRuntime, vi.fn());
+    await expect(fixture.route("fixture:route:other")).rejects.toMatchObject({
+      kind: "http",
+    });
+    await expect(
+      fixture.schedule("fixture:stop:other", "2026-07-23"),
+    ).rejects.toMatchObject({ kind: "http" });
+  });
+
+  it("reports malformed successful JSON as an invalid response, not offline", async () => {
+    const repository = new RiderInfoRepository(
+      { apiMode: "remote", apiBaseUrl: "https://api.example.test" },
+      vi.fn().mockResolvedValue(
+        new Response("{", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    await expect(repository.stop("trimet:stop:1")).rejects.toMatchObject({
       kind: "invalid_response",
     });
   });

@@ -33,7 +33,11 @@ type RateLimit struct {
 }
 
 func Load() (Config, error) {
-	c := Config{ListenAddress: value("TABI_API_LISTEN_ADDRESS", ":8080"), API: PublicAPI{
+	listenAddress := value("TABI_API_LISTEN_ADDRESS", "")
+	if listenAddress == "" {
+		listenAddress = value("HTTP_LISTEN_ADDR", ":8080")
+	}
+	c := Config{ListenAddress: listenAddress, API: PublicAPI{
 		Version: value("TABI_API_VERSION", "0.1.0"), MinimumAppVersion: value("TABI_MINIMUM_APP_VERSION", "0.1.0"),
 		StaleThresholdSeconds: 90, StaticFeedVersion: value("TABI_STATIC_FEED_VERSION", "unknown"),
 		StaticFeedPublishedAt: time.Unix(0, 0).UTC(),
@@ -48,6 +52,10 @@ func Load() (Config, error) {
 	if seconds, e := positiveInt("TABI_RATE_LIMIT_WINDOW_SECONDS", 60); e != nil {
 		return Config{}, e
 	} else {
+		// Check before conversion: a large valid int can wrap Duration.
+		if int64(seconds) > int64(time.Duration(1<<63-1)/time.Second) {
+			return Config{}, fmt.Errorf("TABI_RATE_LIMIT_WINDOW_SECONDS is too large")
+		}
 		c.RateLimit.Window = time.Duration(seconds) * time.Second
 	}
 	if raw := strings.TrimSpace(os.Getenv("TABI_STATIC_FEED_PUBLISHED_AT")); raw != "" {

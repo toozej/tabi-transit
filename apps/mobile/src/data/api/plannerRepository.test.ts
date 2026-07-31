@@ -19,7 +19,7 @@ describe("PlannerRepository", () => {
         },
         constraints: defaultPlannerConstraints,
       }),
-    ).resolves.toHaveLength(1);
+    ).resolves.toMatchObject([{ departureAt: defaultPlannerConstraints.time }]);
   });
   it("does not synthesize a plan from an incomplete draft", async () => {
     await expect(

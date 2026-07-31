@@ -32,6 +32,9 @@ type Querier interface {
 	HasReadyVehicleData(ctx context.Context) (bool, error)
 	// The unique dedupe_key is the concurrency boundary: concurrent workers may
 	// attempt the same event, but only one delivery is materialized.
+	// A duplicate is an expected outcome of concurrent event evaluation. Return
+	// the already-materialized delivery instead of making callers handle it as a
+	// missing row.
 	InsertNotificationDelivery(ctx context.Context, arg InsertNotificationDeliveryParams) (pgtype.UUID, error)
 	// The public static endpoints currently combine enabled active feeds. The
 	// newest activation is the response version marker until the API exposes a

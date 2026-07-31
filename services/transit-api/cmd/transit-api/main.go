@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/toozej/tabi-transit/internal/api"
 	"github.com/toozej/tabi-transit/internal/application"
@@ -12,6 +13,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -69,9 +72,32 @@ func main() {
 			return reader.Ready(ctx)
 		}))
 	}
+	server := &http.Server{
+		Addr:              c.ListenAddress,
+		Handler:           api.New(service, c, options...),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	shutdown, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	errCh := make(chan error, 1)
+	go func() { errCh <- server.ListenAndServe() }()
 	slog.Info("starting transit API", "address", c.ListenAddress, "databaseConfigured", pool != nil)
-	if err := http.ListenAndServe(c.ListenAddress, api.New(service, c, options...)); err != nil {
+	select {
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return
+		}
 		slog.Error("API stopped", "error", err.Error())
 		os.Exit(1)
+	case <-shutdown.Done():
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			slog.Error("API shutdown failed", "error", err.Error())
+			os.Exit(1)
+		}
 	}
 }

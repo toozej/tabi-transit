@@ -34,18 +34,52 @@ import {
 } from "./riderInfoFixtures";
 
 type Request = (input: string, init?: RequestInit) => Promise<Response>;
+export type NearbyCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+function requireFixtureRoute(id: string): void {
+  if (fixtureRoute.route.id !== id)
+    throw new ApiError("Route was not found.", "http");
+}
+
+function isValidNearbyCoordinate(
+  coordinate: NearbyCoordinate | undefined,
+): coordinate is NearbyCoordinate {
+  return Boolean(
+    coordinate &&
+      Number.isFinite(coordinate.latitude) &&
+      Number.isFinite(coordinate.longitude) &&
+      coordinate.latitude >= -90 &&
+      coordinate.latitude <= 90 &&
+      coordinate.longitude >= -180 &&
+      coordinate.longitude <= 180,
+  );
+}
+
 export class RiderInfoRepository {
   constructor(
     private readonly runtime: ApiRuntimeConfig = getApiRuntimeConfig(),
     private readonly request: Request = fetch,
   ) {}
-  async nearby(limitPerMode?: number): Promise<NearbyStops> {
+  async nearby(
+    coordinate: NearbyCoordinate | undefined,
+    limitPerMode?: number,
+  ): Promise<NearbyStops> {
     if (this.runtime.apiMode === "fixture")
       return applyNearbyLimit(fixtureNearby, limitPerMode);
-    return this.get(
-      `/v1/stops/nearby?lat=45.52&lon=-122.68${limitPerMode ? `&limitPerMode=${limitPerMode}` : ""}`,
-      nearbyStopsSchema,
-    );
+    if (!isValidNearbyCoordinate(coordinate))
+      throw new ApiError(
+        "A valid current location is required for nearby stops.",
+        "http",
+      );
+    const query = new URLSearchParams({
+      lat: String(coordinate.latitude),
+      lon: String(coordinate.longitude),
+    });
+    if (limitPerMode) query.set("limitPerMode", String(limitPerMode));
+    return this.get(`/v1/stops/nearby?${query.toString()}`, nearbyStopsSchema);
   }
   async stop(id: string): Promise<Stop> {
     if (this.runtime.apiMode === "fixture") {
@@ -67,11 +101,17 @@ export class RiderInfoRepository {
     return parsed.arrivals;
   }
   async route(id: string): Promise<RouteDetail> {
-    if (this.runtime.apiMode === "fixture") return fixtureRoute;
+    if (this.runtime.apiMode === "fixture") {
+      requireFixtureRoute(id);
+      return fixtureRoute;
+    }
     return this.get(`/v1/routes/${encodeURIComponent(id)}`, routeDetailSchema);
   }
   async routeShape(id: string): Promise<RouteShape> {
-    if (this.runtime.apiMode === "fixture") return fixtureRouteShape;
+    if (this.runtime.apiMode === "fixture") {
+      requireFixtureRoute(id);
+      return fixtureRouteShape;
+    }
     return this.get(
       `/v1/routes/${encodeURIComponent(id)}/shape`,
       routeShapeSchema,
@@ -98,10 +138,21 @@ export class RiderInfoRepository {
       routeStopCollectionSchema,
     );
   }
-  async schedule(stopId: string): Promise<Schedule> {
-    if (this.runtime.apiMode === "fixture") return fixtureSchedule;
+  async schedule(stopId: string, serviceDate: string): Promise<Schedule> {
+    if (this.runtime.apiMode === "fixture") {
+      if (fixtureSchedule.stopId !== stopId)
+        throw new ApiError("Schedule was not found.", "http");
+      return {
+        ...fixtureSchedule,
+        serviceDate,
+        schedule: fixtureSchedule.schedule.map((entry) => ({
+          ...entry,
+          serviceDate,
+        })),
+      };
+    }
     return this.get(
-      `/v1/stops/${encodeURIComponent(stopId)}/schedule`,
+      `/v1/stops/${encodeURIComponent(stopId)}/schedule?serviceDate=${encodeURIComponent(serviceDate)}`,
       scheduleSchema,
     );
   }
@@ -115,18 +166,19 @@ export class RiderInfoRepository {
     return this.get("/v1/static/manifest", staticManifestSchema);
   }
   private async json(path: string): Promise<unknown> {
+    let response: Response;
     try {
-      const response = await this.request(`${this.runtime.apiBaseUrl}${path}`);
-      if (!response.ok)
-        throw new ApiError(
-          "Rider information is temporarily unavailable.",
-          response.status === 503 ? "source_unavailable" : "http",
-        );
-      return await response.json();
+      response = await this.request(`${this.runtime.apiBaseUrl}${path}`);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError("The Tabi API could not be reached.", "offline");
     }
+    if (!response.ok)
+      throw new ApiError(
+        "Rider information is temporarily unavailable.",
+        response.status === 503 ? "source_unavailable" : "http",
+      );
+    return response.json();
   }
   private async get<T>(
     path: string,

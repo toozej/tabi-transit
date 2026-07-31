@@ -74,7 +74,7 @@ export const defaultPlannerConstraints: PlannerConstraints = {
   wheelchairAccessible: false,
   optimization: "fastest",
   timeMode: "depart_at",
-  time: "2026-07-23T17:00:00Z",
+  time: new Date().toISOString(),
 };
 
 export function swapEndpoints(draft: PlannerDraft): PlannerDraft {
@@ -92,6 +92,14 @@ export function rankItineraries(
   constraints: PlannerConstraints,
 ): RankedItineraries {
   const matches = itineraries.filter((itinerary) => {
+    const requestedAt = Date.parse(constraints.time);
+    if (
+      (constraints.timeMode === "depart_at" &&
+        Date.parse(itinerary.departureAt) < requestedAt) ||
+      (constraints.timeMode === "arrive_by" &&
+        Date.parse(itinerary.arrivalAt) > requestedAt)
+    )
+      return false;
     if (
       constraints.maxTransfers !== undefined &&
       itinerary.transfers > constraints.maxTransfers

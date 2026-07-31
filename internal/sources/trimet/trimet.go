@@ -161,6 +161,17 @@ func NewClient(config Config, httpClient *http.Client, clock Clock) (*Client, er
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: config.Timeout}
 	}
+	// Clone instead of mutating an injected client shared by another caller.
+	// A validated initial URL is not enough when the HTTP client follows a
+	// redirect to a different host.
+	clientCopy := *httpClient
+	clientCopy.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if req.URL.Scheme != "https" || !hostAllowed(req.URL.Hostname(), config.AllowedHosts) {
+			return errors.New("redirect target is not an allowlisted HTTPS host")
+		}
+		return nil
+	}
+	httpClient = &clientCopy
 	if clock == nil {
 		clock = systemClock{}
 	}
@@ -286,27 +297,57 @@ func (c *Client) Arrivals(ctx context.Context, request ArrivalsRequest) ([]Arriv
 func (c *Client) Route(ctx context.Context, id string) (Route, Freshness, error) {
 	var v routeResponse
 	f, e := c.getID(ctx, "/ws/v2/routeConfig", id, &v)
-	return mapRoute(v), f, e
+	if e != nil {
+		return Route{}, f, e
+	}
+	if len(v.ResultSet.Route) == 0 {
+		return Route{}, f, malformedResult("route")
+	}
+	return mapRoute(v), f, nil
 }
 func (c *Client) Stop(ctx context.Context, id string) (Stop, Freshness, error) {
 	var v stopResponse
 	f, e := c.getID(ctx, "/ws/v2/stop", id, &v)
-	return mapStop(v), f, e
+	if e != nil {
+		return Stop{}, f, e
+	}
+	if len(v.ResultSet.Location) == 0 {
+		return Stop{}, f, malformedResult("stop")
+	}
+	return mapStop(v), f, nil
 }
 func (c *Client) Vehicle(ctx context.Context, id string) (Vehicle, Freshness, error) {
 	var v vehicleResponse
 	f, e := c.getID(ctx, "/ws/v2/vehicle", id, &v)
-	return mapVehicle(v), f, e
+	if e != nil {
+		return Vehicle{}, f, e
+	}
+	if len(v.ResultSet.Vehicle) == 0 {
+		return Vehicle{}, f, malformedResult("vehicle")
+	}
+	return mapVehicle(v), f, nil
 }
 func (c *Client) Trip(ctx context.Context, id string) (Trip, Freshness, error) {
 	var v tripResponse
 	f, e := c.getID(ctx, "/ws/v2/trip", id, &v)
-	return mapTrip(v), f, e
+	if e != nil {
+		return Trip{}, f, e
+	}
+	if len(v.ResultSet.Trip) == 0 {
+		return Trip{}, f, malformedResult("trip")
+	}
+	return mapTrip(v), f, nil
 }
 func (c *Client) Block(ctx context.Context, id string) (Block, Freshness, error) {
 	var v blockResponse
 	f, e := c.getID(ctx, "/ws/v2/block", id, &v)
-	return mapBlock(v), f, e
+	if e != nil {
+		return Block{}, f, e
+	}
+	if len(v.ResultSet.Block) == 0 {
+		return Block{}, f, malformedResult("block")
+	}
+	return mapBlock(v), f, nil
 }
 func (c *Client) Plan(ctx context.Context, request PlanRequest) (Plan, Freshness, error) {
 	if !c.config.PlannerEnabled {
@@ -363,6 +404,9 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, target 
 	}
 	response, err := c.http.Do(req)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return Freshness{}, &Error{Kind: ErrorInvalid, Err: context.Canceled}
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return Freshness{}, &Error{Kind: ErrorTimeout, Err: errors.New("request deadline exceeded")}
 		}
@@ -399,6 +443,9 @@ func responseDiagnostic(response *http.Response, body []byte, reason string) str
 
 func invalidRequest(message string) error {
 	return &Error{Kind: ErrorInvalid, Err: fmt.Errorf("%w: %s", ErrInvalidRequest, message)}
+}
+func malformedResult(kind string) error {
+	return &Error{Kind: ErrorMalformed, Err: fmt.Errorf("empty %s result", kind)}
 }
 func validateID(id string) error {
 	if id == "" || len(id) > 512 || strings.ContainsAny(id, "\r\n\t") {

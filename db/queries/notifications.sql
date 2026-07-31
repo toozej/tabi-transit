@@ -9,7 +9,11 @@ INSERT INTO app.notification_deliveries (
   sqlc.arg(notification_type), sqlc.arg(dedupe_key), sqlc.arg(payload),
   sqlc.arg(occurred_at), sqlc.arg(expires_at), 'pending', sqlc.arg(next_attempt_at)
 )
-ON CONFLICT (dedupe_key) DO NOTHING
+-- A duplicate is an expected outcome of concurrent event evaluation. Return
+-- the already-materialized delivery instead of making callers handle it as a
+-- missing row.
+ON CONFLICT (dedupe_key) DO UPDATE
+SET dedupe_key = EXCLUDED.dedupe_key
 RETURNING id;
 
 -- name: ClaimNotificationDeliveries :many
@@ -36,15 +40,17 @@ WITH candidates AS (
 ), claimed AS (
   UPDATE app.notification_deliveries d
   SET status = 'sending', attempts = d.attempts + 1,
-      claim_until = sqlc.arg(claim_until), updated_at = sqlc.arg(now_at)
+      claim_until = sqlc.arg(claim_until), claim_token = sqlc.arg(claim_token),
+      updated_at = sqlc.arg(now_at)
   FROM candidates c
   WHERE d.id = c.id
   RETURNING d.id, d.subscription_id, d.push_token_id, d.notification_type,
-            d.payload, d.expires_at, d.attempts
+            d.payload, d.expires_at, d.attempts, d.claim_token, d.dedupe_key
 )
 SELECT claimed.id, claimed.subscription_id, claimed.push_token_id,
        claimed.notification_type, claimed.payload, claimed.expires_at,
-       claimed.attempts, token.token_ciphertext, token.encryption_key_id,
+       claimed.attempts, claimed.claim_token, claimed.dedupe_key,
+       token.token_ciphertext, token.encryption_key_id,
        subscription.quiet_start, subscription.quiet_end, subscription.quiet_time_zone
 FROM claimed
 JOIN app.push_tokens token ON token.id = claimed.push_token_id
@@ -61,28 +67,33 @@ WHERE id = sqlc.arg(id) AND disabled_at IS NULL;
 -- late worker from overwriting a recovered lease or a terminal transition.
 UPDATE app.notification_deliveries
 SET status = 'sent', provider_ticket_id = sqlc.arg(provider_ticket_id),
-    sent_at = sqlc.arg(sent_at), claim_until = NULL, next_attempt_at = NULL,
+    sent_at = sqlc.arg(sent_at), claim_until = NULL, claim_token = NULL,
+    next_attempt_at = NULL,
     last_error_code = NULL, updated_at = sqlc.arg(sent_at)
-WHERE id = sqlc.arg(id) AND status = 'sending';
+WHERE id = sqlc.arg(id) AND status = 'sending'
+  AND claim_token = sqlc.arg(claim_token);
 
 -- name: MarkNotificationDeliveryRetry :execrows
 UPDATE app.notification_deliveries
 SET status = 'retry_pending', next_attempt_at = sqlc.arg(next_attempt_at),
-    claim_until = NULL, last_error_code = sqlc.arg(error_code),
+    claim_until = NULL, claim_token = NULL, last_error_code = sqlc.arg(error_code),
     updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id) AND status = 'sending';
+WHERE id = sqlc.arg(id) AND status = 'sending'
+  AND claim_token = sqlc.arg(claim_token);
 
 -- name: MarkNotificationDeliveryExpired :execrows
 UPDATE app.notification_deliveries
-SET status = 'expired', claim_until = NULL, next_attempt_at = NULL,
+SET status = 'expired', claim_until = NULL, claim_token = NULL, next_attempt_at = NULL,
     updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id) AND status IN ('pending', 'retry_pending', 'sending');
+WHERE id = sqlc.arg(id) AND status = 'sending'
+  AND claim_token = sqlc.arg(claim_token);
 
 -- name: MarkNotificationDeliveryFailed :execrows
 UPDATE app.notification_deliveries
-SET status = 'failed', claim_until = NULL, next_attempt_at = NULL,
+SET status = 'failed', claim_until = NULL, claim_token = NULL, next_attempt_at = NULL,
     last_error_code = sqlc.arg(error_code), updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id) AND status = 'sending';
+WHERE id = sqlc.arg(id) AND status = 'sending'
+  AND claim_token = sqlc.arg(claim_token);
 
 -- name: RecordNotificationReceipt :one
 -- A provider receipt is tied to the ticket created by a successful send. The
@@ -113,6 +124,7 @@ WHERE delivery.provider_ticket_id = sqlc.arg(provider_ticket_id)
 -- Expired notifications are terminal. They must never be retried after a
 -- worker outage or a quiet-hours deferral.
 UPDATE app.notification_deliveries
-SET status = 'expired', next_attempt_at = NULL, updated_at = sqlc.arg(now_at)
+SET status = 'expired', claim_until = NULL, claim_token = NULL,
+    next_attempt_at = NULL, updated_at = sqlc.arg(now_at)
 WHERE status IN ('pending', 'retry_pending', 'sending')
   AND expires_at <= sqlc.arg(now_at);

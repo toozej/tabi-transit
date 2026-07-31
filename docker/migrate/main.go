@@ -61,15 +61,37 @@ func secret(name string) (string, error) {
 }
 
 func migrate(ctx context.Context, pool *pgxpool.Pool, directory string) error {
-	if _, err := pool.Exec(ctx, `SELECT pg_advisory_lock(714812901)`); err != nil {
+	// Advisory locks are scoped to a PostgreSQL session. A pool may choose a
+	// different session for every call, so keep the checked-out connection for
+	// both the lock and every migration operation until it is unlocked.
+	connection, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration connection: %w", err)
+	}
+	defer connection.Release()
+	if _, err := connection.Exec(ctx, `SELECT pg_advisory_lock(714812901)`); err != nil {
 		return fmt.Errorf("acquire migration lock: %w", err)
 	}
-	defer func() { _, _ = pool.Exec(context.Background(), `SELECT pg_advisory_unlock(714812901)`) }()
-	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.tabi_schema_migrations (
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = connection.Exec(unlockCtx, `SELECT pg_advisory_unlock(714812901)`)
+	}()
+	if _, err := connection.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.tabi_schema_migrations (
   filename text PRIMARY KEY,
   applied_at timestamptz NOT NULL DEFAULT now()
-)`); err != nil {
+);`); err != nil {
 		return fmt.Errorf("create migration ledger: %w", err)
+	}
+	if _, err := connection.Exec(ctx, `DO $$
+BEGIN
+  IF to_regclass('public.schema_migrations') IS NOT NULL THEN
+    INSERT INTO public.tabi_schema_migrations (filename)
+    SELECT version FROM public.schema_migrations
+    ON CONFLICT (filename) DO NOTHING;
+  END IF;
+END $$;`); err != nil {
+		return fmt.Errorf("reconcile legacy migration ledger: %w", err)
 	}
 	files, err := filepath.Glob(filepath.Join(directory, "*.up.sql"))
 	if err != nil || len(files) == 0 {
@@ -79,7 +101,7 @@ func migrate(ctx context.Context, pool *pgxpool.Pool, directory string) error {
 	for _, file := range files {
 		name := filepath.Base(file)
 		var applied bool
-		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.tabi_schema_migrations WHERE filename = $1)`, name).Scan(&applied); err != nil {
+		if err := connection.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.tabi_schema_migrations WHERE filename = $1)`, name).Scan(&applied); err != nil {
 			return fmt.Errorf("check %s: %w", name, err)
 		}
 		if applied {
@@ -96,7 +118,7 @@ func migrate(ctx context.Context, pool *pgxpool.Pool, directory string) error {
 		if strings.HasPrefix(statements, "BEGIN;") && strings.HasSuffix(statements, "COMMIT;") {
 			statements = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(statements, "BEGIN;"), "COMMIT;"))
 		}
-		transaction, err := pool.Begin(ctx)
+		transaction, err := connection.Begin(ctx)
 		if err == nil {
 			_, err = transaction.Exec(ctx, statements)
 		}

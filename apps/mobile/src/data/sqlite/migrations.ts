@@ -40,16 +40,37 @@ export async function migrateDatabase(database: SqlExecutor): Promise<void> {
   }
 
   if (version === 0) {
-    await database.execAsync(
-      `BEGIN IMMEDIATE;${CREATE_METADATA_SQL}${CREATE_SAVED_ITEMS_SQL}PRAGMA user_version = 2;COMMIT;`,
+    await runMigration(
+      database,
+      `${CREATE_METADATA_SQL}${CREATE_SAVED_ITEMS_SQL}PRAGMA user_version = 2;`,
     );
     return;
   }
 
   if (version === 1) {
-    await database.execAsync(
-      `BEGIN IMMEDIATE;${CREATE_SAVED_ITEMS_SQL}PRAGMA user_version = 2;COMMIT;`,
+    await runMigration(
+      database,
+      `${CREATE_SAVED_ITEMS_SQL}PRAGMA user_version = 2;`,
     );
+  }
+}
+
+async function runMigration(
+  database: SqlExecutor,
+  statements: string,
+): Promise<void> {
+  await database.execAsync("BEGIN IMMEDIATE");
+  try {
+    await database.execAsync(statements);
+    await database.execAsync("COMMIT");
+  } catch (error) {
+    try {
+      await database.execAsync("ROLLBACK");
+    } catch {
+      // Preserve the original migration failure. A subsequent bootstrap can
+      // still surface an unavailable local store rather than partial schema.
+    }
+    throw error;
   }
 }
 

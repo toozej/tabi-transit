@@ -31,10 +31,13 @@ type ArchivePolicy struct {
 	MaxFiles            int
 	MaxExpandedBytes    int64
 	MaxCompressionRatio float64
+	MaxRowsPerFile      int
+	MaxColumnsPerRow    int
+	MaxCellBytes        int
 }
 
 func DefaultArchivePolicy() ArchivePolicy {
-	return ArchivePolicy{MaxBytes: 100 << 20, MaxFiles: 100, MaxExpandedBytes: 500 << 20, MaxCompressionRatio: 100}
+	return ArchivePolicy{MaxBytes: 100 << 20, MaxFiles: 100, MaxExpandedBytes: 500 << 20, MaxCompressionRatio: 100, MaxRowsPerFile: 1_000_000, MaxColumnsPerRow: 128, MaxCellBytes: 64 << 10}
 }
 
 type Stop struct {
@@ -80,7 +83,7 @@ type Feed struct {
 
 // Read validates archive topology before decoding required CSV files.
 func Read(r io.Reader, policy ArchivePolicy) (Feed, error) {
-	if policy.MaxBytes <= 0 || policy.MaxFiles <= 0 || policy.MaxExpandedBytes <= 0 || policy.MaxCompressionRatio <= 0 {
+	if policy.MaxBytes <= 0 || policy.MaxFiles <= 0 || policy.MaxExpandedBytes <= 0 || policy.MaxCompressionRatio <= 0 || policy.MaxRowsPerFile <= 0 || policy.MaxColumnsPerRow <= 0 || policy.MaxCellBytes <= 0 {
 		return Feed{}, fmt.Errorf("%w: invalid archive policy", ErrUnsafeArchive)
 	}
 	b, err := io.ReadAll(io.LimitReader(r, policy.MaxBytes+1))
@@ -114,10 +117,10 @@ func Read(r io.Reader, policy ArchivePolicy) (Feed, error) {
 		if expanded > uint64(policy.MaxExpandedBytes) {
 			return Feed{}, fmt.Errorf("%w: expanded bytes", ErrUnsafeArchive)
 		}
-		if !strings.HasSuffix(name, ".txt") {
+		if !supportedTable(name) {
 			continue
 		}
-		rows, err := csvRows(f)
+		rows, err := csvRows(f, policy)
 		if err != nil {
 			return Feed{}, err
 		}
@@ -136,13 +139,21 @@ func Read(r io.Reader, policy ArchivePolicy) (Feed, error) {
 	feed.SHA256 = hex.EncodeToString(sum[:])
 	return feed, nil
 }
+func supportedTable(name string) bool {
+	switch name {
+	case "agency.txt", "stops.txt", "routes.txt", "trips.txt", "stop_times.txt", "calendar.txt", "calendar_dates.txt":
+		return true
+	default:
+		return false
+	}
+}
 func maxInt64(v uint64, min uint64) uint64 {
 	if v < min {
 		return min
 	}
 	return v
 }
-func csvRows(f *zip.File) ([]map[string]string, error) {
+func csvRows(f *zip.File, policy ArchivePolicy) ([]map[string]string, error) {
 	rc, err := f.Open()
 	if err != nil {
 		return nil, err
@@ -154,6 +165,9 @@ func csvRows(f *zip.File) ([]map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s header", ErrInvalidFeed, f.Name)
 	}
+	if len(header) == 0 || len(header) > policy.MaxColumnsPerRow {
+		return nil, fmt.Errorf("%w: %s column count", ErrInvalidFeed, f.Name)
+	}
 	out := []map[string]string{}
 	for {
 		rec, e := r.Read()
@@ -163,11 +177,17 @@ func csvRows(f *zip.File) ([]map[string]string, error) {
 		if e != nil {
 			return nil, fmt.Errorf("%w: %s CSV", ErrInvalidFeed, f.Name)
 		}
-		if len(rec) != len(header) {
+		if len(rec) != len(header) || len(rec) > policy.MaxColumnsPerRow {
 			return nil, fmt.Errorf("%w: %s row width", ErrInvalidFeed, f.Name)
+		}
+		if len(out) >= policy.MaxRowsPerFile {
+			return nil, fmt.Errorf("%w: %s row limit", ErrUnsafeArchive, f.Name)
 		}
 		row := map[string]string{}
 		for i, k := range header {
+			if len(rec[i]) > policy.MaxCellBytes {
+				return nil, fmt.Errorf("%w: %s cell limit", ErrUnsafeArchive, f.Name)
+			}
 			row[strings.TrimSpace(k)] = strings.TrimSpace(rec[i])
 		}
 		out = append(out, row)
@@ -192,6 +212,9 @@ func build(t map[string][]map[string]string) (Feed, error) {
 		timezone, e := need(r, "agency_timezone", "agency")
 		if e != nil {
 			return f, e
+		}
+		if timezone == "Local" {
+			return f, fmt.Errorf("%w: agency.agency_timezone", ErrInvalidFeed)
 		}
 		if _, e = time.LoadLocation(timezone); e != nil {
 			return f, fmt.Errorf("%w: agency.agency_timezone", ErrInvalidFeed)
@@ -305,6 +328,7 @@ func build(t map[string][]map[string]string) (Feed, error) {
 	if len(f.Stops) == 0 || len(f.Routes) == 0 || len(f.Trips) == 0 {
 		return f, fmt.Errorf("%w: empty essential data", ErrInvalidFeed)
 	}
+	stopSequences := map[string]struct{}{}
 	for _, r := range t["stop_times.txt"] {
 		trip, e := need(r, "trip_id", "stop_times")
 		if e != nil {
@@ -321,6 +345,11 @@ func build(t map[string][]map[string]string) (Feed, error) {
 		if !trips[trip] || !stops[stop] {
 			return f, fmt.Errorf("%w: stop time reference", ErrInvalidFeed)
 		}
+		key := trip + "\x00" + strconv.Itoa(seq)
+		if _, exists := stopSequences[key]; exists {
+			return f, fmt.Errorf("%w: duplicate stop sequence", ErrInvalidFeed)
+		}
+		stopSequences[key] = struct{}{}
 		a, ha, e := gtfsTime(r["arrival_time"])
 		if e != nil {
 			return f, e
@@ -400,6 +429,9 @@ func gtfsTime(v string) (int, bool, error) {
 	}
 	s, e := strconv.Atoi(p[2])
 	if e != nil || s < 0 || s > 59 {
+		return 0, false, ErrInvalidFeed
+	}
+	if h > (math.MaxInt-m*60-s)/3600 {
 		return 0, false, ErrInvalidFeed
 	}
 	return h*3600 + m*60 + s, true, nil

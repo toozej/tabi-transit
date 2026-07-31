@@ -96,7 +96,10 @@ func ParseVehiclePositions(raw []byte, now time.Time, maxAge, futureSkew time.Du
 		}
 		var entityAt *time.Time
 		if entity.Vehicle.Timestamp != nil {
-			t := time.Unix(int64(entity.Vehicle.GetTimestamp()), 0).UTC()
+			t, ok := epochUint64(entity.Vehicle.GetTimestamp())
+			if !ok {
+				return Feed{}, fmt.Errorf("%w: invalid vehicle timestamp", ErrMalformed)
+			}
 			if t.After(now.Add(futureSkew)) {
 				return Feed{}, fmt.Errorf("%w: future entity timestamp", ErrMalformed)
 			}
@@ -147,7 +150,10 @@ func ParseTripUpdateFeed(raw []byte, now time.Time, maxAge, futureSkew time.Dura
 		seen[entity.GetId()] = struct{}{}
 		update := TripUpdate{EntityID: entity.GetId(), TripID: entity.TripUpdate.Trip.GetTripId(), RouteID: entity.TripUpdate.Trip.GetRouteId(), StartDate: entity.TripUpdate.Trip.GetStartDate(), ScheduleRelationship: entity.TripUpdate.Trip.GetScheduleRelationship().String()}
 		if entity.TripUpdate.Timestamp != nil {
-			value := time.Unix(int64(entity.TripUpdate.GetTimestamp()), 0).UTC()
+			value, ok := epochUint64(entity.TripUpdate.GetTimestamp())
+			if !ok {
+				return TripUpdateFeed{}, fmt.Errorf("%w: invalid trip timestamp", ErrMalformed)
+			}
 			if value.After(now.Add(futureSkew)) {
 				return TripUpdateFeed{}, fmt.Errorf("%w: future trip update", ErrMalformed)
 			}
@@ -234,10 +240,13 @@ func parseMessage(raw []byte, now time.Time, maxAge, futureSkew time.Duration) (
 	if message.Header == nil || message.Header.GetGtfsRealtimeVersion() == "" || message.Header.Timestamp == nil {
 		return nil, time.Time{}, fmt.Errorf("%w: required header missing", ErrMalformed)
 	}
-	if message.Header.GetIncrementality() == gtfs.FeedHeader_DIFFERENTIAL {
-		return nil, time.Time{}, fmt.Errorf("%w: differential feeds are not supported", ErrMalformed)
+	if message.Header.GetIncrementality() != gtfs.FeedHeader_FULL_DATASET {
+		return nil, time.Time{}, fmt.Errorf("%w: only full-dataset feeds are supported", ErrMalformed)
 	}
-	updated := time.Unix(int64(message.Header.GetTimestamp()), 0).UTC()
+	updated, ok := epochUint64(message.Header.GetTimestamp())
+	if !ok {
+		return nil, time.Time{}, fmt.Errorf("%w: invalid feed timestamp", ErrMalformed)
+	}
 	if updated.After(now.Add(futureSkew)) || (maxAge > 0 && now.Sub(updated) > maxAge) {
 		return nil, time.Time{}, fmt.Errorf("%w: feed timestamp outside permitted age", ErrMalformed)
 	}
@@ -247,7 +256,10 @@ func epochPtr(value *uint64, now time.Time, futureSkew time.Duration) *time.Time
 	if value == nil {
 		return nil
 	}
-	result := time.Unix(int64(*value), 0).UTC()
+	result, ok := epochUint64(*value)
+	if !ok {
+		return nil
+	}
 	if result.After(now.Add(futureSkew)) {
 		return nil
 	}
@@ -267,8 +279,17 @@ func epochAnyPtr(value *uint64) *time.Time {
 	if value == nil {
 		return nil
 	}
-	result := time.Unix(int64(*value), 0).UTC()
+	result, ok := epochUint64(*value)
+	if !ok {
+		return nil
+	}
 	return &result
+}
+func epochUint64(value uint64) (time.Time, bool) {
+	if value > math.MaxInt64 {
+		return time.Time{}, false
+	}
+	return time.Unix(int64(value), 0).UTC(), true
 }
 func translated(text *gtfs.TranslatedString) string {
 	if text == nil || len(text.Translation) == 0 {

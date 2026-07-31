@@ -44,16 +44,17 @@ function State({
   return <>{children}</>;
 }
 export function NearbyView() {
-  const query = useNearbyStops(2);
+  // A location integration can pass an explicit foreground coordinate here.
+  // Never substitute a city-center coordinate: that makes distant results look
+  // local and leaks a false distance claim.
+  const query = useNearbyStops(undefined, 2);
   return (
     <State loading={query.isLoading} error={query.isError}>
       <ScrollView contentContainerStyle={styles.page}>
         <Text accessibilityRole="header" style={styles.heading}>
           Nearby stops
         </Text>
-        <Text>
-          Nearest two stops for each selected mode. Distances are straight line.
-        </Text>
+        <Text>Enable location access to find nearby stops.</Text>
         {query.data?.groups.map((group) => (
           <View
             key={group.mode}

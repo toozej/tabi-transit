@@ -66,4 +66,21 @@ describe("trip planning domain", () => {
       }),
     ).toMatchObject({ itineraries: [], disclosure: expect.any(String) });
   });
+
+  it("honors both depart-at and arrive-by constraints when ranking fixtures", () => {
+    expect(
+      rankItineraries([itinerary], {
+        ...defaultPlannerConstraints,
+        timeMode: "depart_at",
+        time: "2026-07-23T17:01:00Z",
+      }).itineraries,
+    ).toEqual([]);
+    expect(
+      rankItineraries([itinerary], {
+        ...defaultPlannerConstraints,
+        timeMode: "arrive_by",
+        time: "2026-07-23T17:29:00Z",
+      }).itineraries,
+    ).toEqual([]);
+  });
 });

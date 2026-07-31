@@ -1,24 +1,57 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { riderInfoRepository } from "@/data/api/riderInfoRepository";
+import {
+  riderInfoRepository,
+  type NearbyCoordinate,
+} from "@/data/api/riderInfoRepository";
+import { getApiRuntimeConfig } from "@/data/api/config";
+
+const AGENCY_TIME_ZONE = "America/Los_Angeles";
+
+export function serviceDateInAgencyTimeZone(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: AGENCY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${value.year}-${value.month}-${value.day}`;
+}
 
 export const riderInfoKeys = {
-  nearby: (limitPerMode?: number) => ["nearby-stops", limitPerMode] as const,
+  nearby: (coordinate: NearbyCoordinate | undefined, limitPerMode?: number) =>
+    [
+      "nearby-stops",
+      coordinate?.latitude,
+      coordinate?.longitude,
+      limitPerMode,
+    ] as const,
   stop: (id: string) => ["stop", id] as const,
   arrivals: (stopId: string) => ["arrivals", stopId] as const,
   route: (id: string) => ["route", id] as const,
   routeShape: (id: string) => ["route-shape", id] as const,
   routeStops: (id: string, directionId?: 0 | 1) =>
     ["route-stops", id, directionId] as const,
-  schedule: (id: string) => ["schedule", id] as const,
+  schedule: (id: string, serviceDate: string) =>
+    ["schedule", id, serviceDate] as const,
   alerts: ["alerts"] as const,
   manifest: ["static-manifest"] as const,
 };
 
-export function useNearbyStops(limitPerMode = 2) {
+export function useNearbyStops(
+  coordinate?: NearbyCoordinate,
+  limitPerMode = 2,
+) {
   return useQuery({
-    queryKey: riderInfoKeys.nearby(limitPerMode),
-    queryFn: () => riderInfoRepository.nearby(limitPerMode),
+    queryKey: riderInfoKeys.nearby(coordinate, limitPerMode),
+    queryFn: () => riderInfoRepository.nearby(coordinate, limitPerMode),
+    enabled:
+      coordinate !== undefined || getApiRuntimeConfig().apiMode === "fixture",
   });
 }
 export function useStop(id: string) {
@@ -58,12 +91,14 @@ export function useRouteStops(id: string, directionId?: 0 | 1) {
     staleTime: Infinity,
   });
 }
-export function useSchedule(id: string) {
+export function useSchedule(
+  id: string,
+  serviceDate = serviceDateInAgencyTimeZone(),
+) {
   return useQuery({
-    queryKey: riderInfoKeys.schedule(id),
-    queryFn: () => riderInfoRepository.schedule(id),
+    queryKey: riderInfoKeys.schedule(id, serviceDate),
+    queryFn: () => riderInfoRepository.schedule(id, serviceDate),
     enabled: Boolean(id),
-    staleTime: Infinity,
   });
 }
 export function useAlerts() {

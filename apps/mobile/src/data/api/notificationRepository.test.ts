@@ -32,4 +32,21 @@ describe("fixture notification repository", () => {
       reason: "device_push_disabled",
     });
   });
+
+  it("uses its current clock when omitting expired fixture subscriptions", async () => {
+    const repository = createFixtureNotificationRepository(
+      [
+        {
+          id: "fixture:subscription:expired",
+          type: "service_alert",
+          scope: { routeId: "trimet:route:20" },
+          createdAt: "2026-07-23T00:00:00Z",
+          expiresAt: "2026-07-24T00:00:00Z",
+        },
+      ],
+      () => new Date("2026-07-25T00:00:00Z"),
+    );
+
+    await expect(repository.list()).resolves.toEqual([]);
+  });
 });

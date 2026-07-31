@@ -16,8 +16,14 @@ describe("vehicle filtering and freshness", () => {
     expect(fixtureVehicles).toHaveLength(3);
   });
 
-  it("never labels stale data as live", () => {
+  it("labels only fresh realtime data as live", () => {
     expect(formatFreshness(fixtureVehicles[2]!.freshness)).toContain("stale");
     expect(formatFreshness(fixtureVehicles[0]!.freshness)).toContain("Live");
+    expect(
+      formatFreshness({
+        ...fixtureVehicles[0]!.freshness,
+        isRealtime: false,
+      }),
+    ).not.toContain("Live");
   });
 });

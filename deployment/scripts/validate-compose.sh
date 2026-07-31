@@ -21,6 +21,9 @@ TABI_STATIC_ARTIFACT_DIR=/tmp/tabi-validation/static-artifacts
 TABI_BACKEND_IMAGE=ghcr.io/example/tabi-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 POSTGIS_IMAGE=postgis/postgis@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 CADDY_IMAGE=caddy@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+GTFSRT_SOURCE_ID=trimet
+GTFSRT_VEHICLE_ENDPOINT=https://feeds.example.invalid/vehicle-positions
+GTFSRT_ALLOWED_HOSTS=feeds.example.invalid
 EOF
 printf 'postgres://tabi:validation-placeholder@postgres:5432/tabi?sslmode=disable\n' > "$temporary_dir/database_url"
 

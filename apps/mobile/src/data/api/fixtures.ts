@@ -69,6 +69,13 @@ export const fixtureVehicleHistory: Record<string, VehicleHistory> = {
     retentionDays: 30,
     observations: [
       {
+        coordinate: [-122.67, 45.52],
+        observedAt: processedAt,
+        routeId: "fixture:route:20",
+        mode: "bus",
+        freshness: { status: "fresh", fetchedAt: processedAt },
+      },
+      {
         coordinate: [-122.672, 45.519],
         observedAt: "2026-07-22T16:15:02Z",
         routeId: "fixture:route:20",
@@ -77,13 +84,6 @@ export const fixtureVehicleHistory: Record<string, VehicleHistory> = {
           status: "fresh",
           fetchedAt: "2026-07-22T16:15:02Z",
         },
-      },
-      {
-        coordinate: [-122.67, 45.52],
-        observedAt: processedAt,
-        routeId: "fixture:route:20",
-        mode: "bus",
-        freshness: { status: "fresh", fetchedAt: processedAt },
       },
     ],
     freshness: {

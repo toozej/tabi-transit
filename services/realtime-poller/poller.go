@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -144,10 +145,7 @@ func (s Service) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	client := s.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: s.Config.Timeout}
-	}
+	client := s.client()
 	response, err := client.Do(request)
 	if err != nil {
 		return s.failure(ctx, "fetch_failed", fetched, err)
@@ -175,8 +173,11 @@ func (s Service) Run(ctx context.Context) error {
 }
 func (s Service) RunLoop(ctx context.Context) error {
 	for {
-		if err := s.Run(ctx); err != nil && errors.Is(err, ErrDisabled) {
-			return err
+		if err := s.Run(ctx); err != nil {
+			if errors.Is(err, ErrDisabled) {
+				return err
+			}
+			slog.Error("GTFS-Realtime vehicle poll failed", "error", err.Error())
 		}
 		timer := time.NewTimer(s.Config.Interval)
 		select {
@@ -208,10 +209,7 @@ func (s Service) RunTripUpdates(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	client := s.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: s.Config.Timeout}
-	}
+	client := s.client()
 	response, err := client.Do(request)
 	if err != nil {
 		return s.failure(ctx, "fetch_failed", fetched, err)
@@ -243,8 +241,11 @@ func (s Service) RunTripUpdates(ctx context.Context) error {
 }
 func (s Service) RunTripUpdatesLoop(ctx context.Context) error {
 	for {
-		if err := s.RunTripUpdates(ctx); err != nil && errors.Is(err, ErrDisabled) {
-			return err
+		if err := s.RunTripUpdates(ctx); err != nil {
+			if errors.Is(err, ErrDisabled) {
+				return err
+			}
+			slog.Error("GTFS-Realtime trip-update poll failed", "error", err.Error())
 		}
 		timer := time.NewTimer(s.Config.Interval)
 		select {
@@ -259,13 +260,50 @@ func (s Service) failure(ctx context.Context, safeCode string, at time.Time, cau
 	_ = s.Store.RecordSourceFailure(ctx, s.Config.SourceID, safeCode, at)
 	return fmt.Errorf("GTFS-Realtime poll %s: %w", safeCode, cause)
 }
-func public(source, kind, raw string) string { return source + ":" + kind + ":" + raw }
+
+// client preserves caller-provided transports but validates every redirect
+// target. URL allowlisting at configuration time alone is not sufficient:
+// net/http follows redirects by default.
+func (s Service) client() *http.Client {
+	base := s.HTTPClient
+	if base == nil {
+		base = &http.Client{Timeout: s.Config.Timeout}
+	}
+	copy := *base
+	copy.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if req.URL.Scheme != "https" || !hostAllowed(req.URL.Hostname(), s.Config.AllowedHosts) {
+			return errors.New("redirect target is not an allowlisted HTTPS host")
+		}
+		return nil
+	}
+	return &copy
+}
+func hostAllowed(host string, allowed []string) bool {
+	for _, item := range allowed {
+		if strings.EqualFold(host, strings.TrimSpace(item)) {
+			return true
+		}
+	}
+	return false
+}
+func public(source, kind, raw string) string {
+	if !validSourceComponent(raw) {
+		return ""
+	}
+	return source + ":" + kind + ":" + raw
+}
 func publicPtr(source, kind, raw string) *string {
 	if raw == "" {
 		return nil
 	}
 	value := public(source, kind, raw)
+	if value == "" {
+		return nil
+	}
 	return &value
+}
+func validSourceComponent(raw string) bool {
+	return raw != "" && len(raw) <= 512 && !strings.ContainsAny(raw, ":\r\n\t")
 }
 func valueOrEmpty(value *string) string {
 	if value == nil {

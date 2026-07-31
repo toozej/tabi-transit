@@ -165,7 +165,7 @@ func decodeResponse(body io.Reader, target any) error {
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
-	if decoder.More() {
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return fmt.Errorf("unexpected trailing JSON value")
 	}
 	return nil

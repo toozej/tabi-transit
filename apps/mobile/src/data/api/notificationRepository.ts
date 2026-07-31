@@ -39,13 +39,20 @@ export interface NotificationRepository {
 
 export function createFixtureNotificationRepository(
   initial: NotificationSubscription[] = fixtureNotificationSubscriptions,
-  now: () => Date = () => new Date("2026-07-23T00:00:00Z"),
+  now: () => Date = () => new Date(),
 ): NotificationRepository {
   let values = initial.map((value) => ({ ...value }));
   let nextId = values.length + 1;
   return {
     async list() {
-      return values.map((value) => ({ ...value }));
+      const currentTime = now().getTime();
+      return values
+        .filter(
+          (value) =>
+            value.expiresAt === undefined ||
+            new Date(value.expiresAt).getTime() > currentTime,
+        )
+        .map((value) => ({ ...value }));
     },
     async create(draft) {
       const validated = validateSubscriptionDraft(draft, now());

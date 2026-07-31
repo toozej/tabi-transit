@@ -86,6 +86,30 @@ describe("saved and recent rider state", () => {
     });
   });
 
+  it("does not let delayed hydration overwrite a choice made during bootstrap", async () => {
+    let resolveLoad: ((value: { saved: []; recents: [] }) => void) | undefined;
+    const repository: SavedRepository = {
+      load: () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      replace: async () => undefined,
+    };
+    configureSavedRepository(repository);
+
+    const hydration = useSavedStore.getState().hydrate();
+    await useSavedStore
+      .getState()
+      .toggleSaved({ id: "fixture:stop:101", label: "Burnside", kind: "stop" });
+    resolveLoad?.({ saved: [], recents: [] });
+    await hydration;
+
+    expect(useSavedStore.getState()).toMatchObject({
+      saved: [{ id: "fixture:stop:101" }],
+      persistence: "ready",
+    });
+  });
+
   it("keeps choices in-session and marks storage unavailable when writing fails", async () => {
     const failingRepository: SavedRepository = {
       load: async () => ({ saved: [], recents: [] }),

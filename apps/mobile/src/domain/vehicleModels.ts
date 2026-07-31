@@ -128,6 +128,9 @@ export function filterVehicles(
 }
 
 export function formatFreshness(freshness: Vehicle["freshness"]): string {
-  const label = freshness.status === "fresh" ? "Live" : freshness.status;
+  const label =
+    freshness.status === "fresh" && freshness.isRealtime
+      ? "Live"
+      : freshness.status;
   return `${label}; ${Math.round(freshness.ageSeconds)} seconds old; source ${freshness.source}`;
 }

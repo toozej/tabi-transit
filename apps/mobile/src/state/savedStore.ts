@@ -23,6 +23,7 @@ type NewRecentItem = Omit<RecentItem, "openedAt">;
 
 let repository: SavedRepository = new MemorySavedRepository();
 let now = () => new Date().toISOString();
+let mutationGeneration = 0;
 
 function currentSnapshot(): SavedSnapshot {
   const { saved, recents } = useSavedStore.getState();
@@ -56,10 +57,16 @@ export const useSavedStore = create<SavedState>((set) => ({
   ...emptySavedSnapshot(),
   persistence: "loading",
   hydrate: async () => {
+    const generationAtStart = mutationGeneration;
     try {
       const snapshot = sanitizeSavedSnapshot(await repository.load());
+      // Hydration is asynchronous. If the rider made a choice while SQLite
+      // was opening, the in-memory state is newer than this snapshot and must
+      // remain authoritative.
+      if (mutationGeneration !== generationAtStart) return;
       set({ ...snapshot, persistence: "ready" });
     } catch {
+      if (mutationGeneration !== generationAtStart) return;
       set({ persistence: "unavailable" });
     }
   },
@@ -67,6 +74,7 @@ export const useSavedStore = create<SavedState>((set) => ({
   toggleSaved: async (item) => {
     const parsed = savedItemInputSchema.safeParse(item);
     if (!parsed.success) return;
+    mutationGeneration += 1;
     const timestamp = now();
     set((state) => {
       const existing = state.saved.some((saved) => saved.id === parsed.data.id);
@@ -84,6 +92,7 @@ export const useSavedStore = create<SavedState>((set) => ({
   addRecent: async (item) => {
     const parsed = savedItemInputSchema.safeParse(item);
     if (!parsed.success) return;
+    mutationGeneration += 1;
     const timestamp = now();
     set((state) => ({
       recents: [
@@ -94,10 +103,12 @@ export const useSavedStore = create<SavedState>((set) => ({
     await persistCurrent();
   },
   clearRecents: async () => {
+    mutationGeneration += 1;
     set({ recents: [] });
     await persistCurrent();
   },
   clearAllLocalData: async () => {
+    mutationGeneration += 1;
     set(emptySavedSnapshot());
     await persistCurrent();
   },
@@ -117,5 +128,6 @@ export function configureSavedStoreClock(clock: () => string): void {
 export function resetSavedStoreForTest(): void {
   repository = new MemorySavedRepository();
   now = () => new Date().toISOString();
+  mutationGeneration = 0;
   useSavedStore.setState({ ...emptySavedSnapshot(), persistence: "loading" });
 }

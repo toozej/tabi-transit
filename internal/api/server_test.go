@@ -101,6 +101,27 @@ func testRiderServer(t *testing.T, rider *fakeRiderInfo) http.Handler {
 	c := config.Config{API: config.PublicAPI{Version: "0.1.0", MinimumAppVersion: "0.1.0", StaticFeedVersion: "fixture-v1", StaticFeedPublishedAt: time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)}, RateLimit: config.RateLimit{Requests: 50, Window: time.Hour}}
 	return api.New(application.Service{Catalog: fakeCatalog{}, Vehicles: fakeVehicles{items: []persistence.Vehicle{vehicle()}}, RiderInfo: rider}, c)
 }
+func TestStaticManifestIsRegisteredAndConditional(t *testing.T) {
+	h := testServer(t, fakeVehicles{})
+	w := request(h, "/v1/static/manifest")
+	if w.Code != http.StatusOK || w.Header().Get("X-Static-Feed-Version") != "fixture-v1" || w.Header().Get("ETag") == "" {
+		t.Fatalf("manifest response: %d %#v", w.Code, w.Header())
+	}
+	var body struct {
+		StaticFeedVersion string            `json:"staticFeedVersion"`
+		Artifacts         []json.RawMessage `json:"artifacts"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.StaticFeedVersion != "fixture-v1" || body.Artifacts == nil {
+		t.Fatalf("manifest body: %s err=%v", w.Body.String(), err)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/v1/static/manifest", nil)
+	r.Header.Set("If-None-Match", w.Header().Get("ETag"))
+	second := httptest.NewRecorder()
+	h.ServeHTTP(second, r)
+	if second.Code != http.StatusNotModified {
+		t.Fatalf("conditional manifest: %d", second.Code)
+	}
+}
 func vehicle() persistence.Vehicle {
 	at := time.Date(2026, 7, 22, 16, 30, 2, 0, time.UTC)
 	route := "fixture:route:20"
@@ -129,7 +150,7 @@ func TestVehicleEndpointsConformToCoreContract(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.SnapshotID != "42" || len(got.Vehicles) != 1 || got.Vehicles[0].ID != "fixture:vehicle:2901" || got.Vehicles[0].Freshness["status"] != "fresh" {
+	if got.SnapshotID != "42" || len(got.Vehicles) != 1 || got.Vehicles[0].ID != "fixture:vehicle:2901" || got.Vehicles[0].Freshness["status"] != "stale" {
 		t.Fatalf("contract response mismatch: %#v", got)
 	}
 	w = request(h, "/v1/vehicles/search?q=2901")

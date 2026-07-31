@@ -182,7 +182,7 @@ export class PlannerRepository {
       throw new PlannerFeatureDisabledError();
     if (this.runtime.apiMode === "remote") return this.remotePlan(draft);
     const parsed = fixtureItineraries.map((value) =>
-      itinerarySchema.parse(value),
+      itinerarySchema.parse(scheduleFixtureItinerary(value, draft)),
     );
     return rankItineraries(parsed, draft.constraints).itineraries;
   }
@@ -225,6 +225,30 @@ export class PlannerRepository {
       );
     }
   }
+}
+
+function scheduleFixtureItinerary(
+  itinerary: Itinerary,
+  draft: PlannerDraft,
+): Itinerary {
+  const anchor =
+    draft.constraints.timeMode === "depart_at"
+      ? itinerary.departureAt
+      : itinerary.arrivalAt;
+  const shiftMilliseconds =
+    Date.parse(draft.constraints.time) - Date.parse(anchor);
+  const shift = (value: string) =>
+    new Date(Date.parse(value) + shiftMilliseconds).toISOString();
+  return {
+    ...itinerary,
+    departureAt: shift(itinerary.departureAt),
+    arrivalAt: shift(itinerary.arrivalAt),
+    legs: itinerary.legs.map((leg) => ({
+      ...leg,
+      startAt: shift(leg.startAt),
+      endAt: shift(leg.endAt),
+    })),
+  };
 }
 
 export const plannerRepository = new PlannerRepository();

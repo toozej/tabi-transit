@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const vehicleHistoryRetention = 30 * 24 * time.Hour
+
+var ErrOutdatedSnapshot = errors.New("realtime snapshot is older than the current projection")
 
 // PostgresRealtimeWriter replaces bounded current-state projections. Each
 // successful feed is inserted and swapped inside one transaction; callers
@@ -32,6 +35,9 @@ func (w PostgresRealtimeWriter) ReplaceVehicleSnapshot(ctx context.Context, snap
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockAndCheckSnapshot(ctx, tx, snapshot.SourceID, snapshot.SourceUpdatedAt); err != nil {
+		return err
+	}
 	var snapshotID int64
 	err = tx.QueryRow(ctx, `INSERT INTO realtime.snapshots(source_id,source_updated_at,fetched_at,processed_at,entity_count,content_sha256,is_valid,validation_report)
 VALUES($1,$2,$3,$4,$5,$6,true,jsonb_build_object('projection','vehicles'))
@@ -87,6 +93,9 @@ func (w PostgresRealtimeWriter) ReplaceTripUpdateSnapshot(ctx context.Context, s
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockAndCheckSnapshot(ctx, tx, snapshot.SourceID, snapshot.SourceUpdatedAt); err != nil {
+		return err
+	}
 	var snapshotID int64
 	err = tx.QueryRow(ctx, `INSERT INTO realtime.snapshots(source_id,source_updated_at,fetched_at,processed_at,entity_count,content_sha256,is_valid,validation_report)
 VALUES($1,$2,$3,$4,$5,$6,true,jsonb_build_object('projection','trip_updates'))
@@ -155,12 +164,41 @@ func (w PostgresRealtimeWriter) RecordSourceFailure(ctx context.Context, sourceI
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `DELETE FROM history.vehicle_observations WHERE processed_at < now() - $1::interval`, vehicleHistoryRetention.String()); err != nil {
+		return fmt.Errorf("prune vehicle history: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM history.trip_update_observations WHERE processed_at < now() - $1::interval`, vehicleHistoryRetention.String()); err != nil {
+		return fmt.Errorf("prune trip update history: %w", err)
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO ops.source_health(source_id,last_attempt_at,last_failure_at,consecutive_failures,last_error_code)
 VALUES($1,$2,$2,1,$3)
 ON CONFLICT(source_id) DO UPDATE SET last_attempt_at=EXCLUDED.last_attempt_at,last_failure_at=EXCLUDED.last_failure_at,consecutive_failures=ops.source_health.consecutive_failures+1,last_error_code=EXCLUDED.last_error_code,updated_at=now()`, sourceID, attemptedAt, safeCode); err != nil {
 		return fmt.Errorf("record source failure: %w", err)
 	}
 	return tx.Commit(ctx)
+}
+
+func lockAndCheckSnapshot(ctx context.Context, tx pgx.Tx, sourceID string, sourceUpdatedAt *time.Time) error {
+	// A transaction advisory lock serializes replacements for one source. It
+	// prevents two pollers from interleaving delete-and-replace projections.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, sourceID); err != nil {
+		return fmt.Errorf("lock source snapshot: %w", err)
+	}
+	if sourceUpdatedAt == nil {
+		return nil
+	}
+	var current pgtype.Timestamptz
+	err := tx.QueryRow(ctx, `SELECT source_updated_at FROM realtime.snapshots WHERE source_id=$1 AND is_valid AND source_updated_at IS NOT NULL ORDER BY source_updated_at DESC LIMIT 1`, sourceID).Scan(&current)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read current source timestamp: %w", err)
+	}
+	if current.Valid && sourceUpdatedAt.Before(current.Time) {
+		return ErrOutdatedSnapshot
+	}
+	return nil
 }
 
 func (w PostgresRealtimeWriter) recordSuccess(ctx context.Context, tx pgx.Tx, sourceID string, fetchedAt time.Time, sourceUpdatedAt *time.Time, entityCount int) error {

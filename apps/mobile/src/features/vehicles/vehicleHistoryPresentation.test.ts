@@ -15,7 +15,7 @@ describe("vehicle history presentation", () => {
       fixtureVehicleHistory["fixture:vehicle:2901"]!.observations[0]!;
 
     expect(formatHistoryObservation(observation)).toBe(
-      "Observed Jul 22, 2026, 4:15 PM at 45.5190, -122.6720",
+      "Observed Jul 22, 2026, 4:30 PM at 45.5200, -122.6700",
     );
   });
 

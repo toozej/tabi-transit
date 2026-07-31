@@ -69,8 +69,12 @@ generate: ## Generate OpenAPI client and sqlc code
 	@test -f db/sqlc.yaml || { echo 'sqlc configuration missing: db/sqlc.yaml (WP-03)'; exit 1; }
 	@go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate -f db/sqlc.yaml
 
-generate-check: generate ## Verify generated API and persistence code is current
-	@git diff --exit-code -- api packages/api-client db internal/persistence/sqlcgen
+generate-check: ## Verify generated API and persistence code is current
+	@before=$$(mktemp); after=$$(mktemp); trap 'rm -f "$$before" "$$after"' EXIT; \
+	git diff -- packages/api-client/src/generated internal/persistence/sqlcgen > "$$before"; \
+	$(MAKE) generate; \
+	git diff -- packages/api-client/src/generated internal/persistence/sqlcgen > "$$after"; \
+	diff -u "$$before" "$$after"
 
 db-up: ## Start the local PostgreSQL/PostGIS database container
 	@test -f deployment/compose.yaml || { echo 'Compose topology missing: deployment/compose.yaml (WP-13)'; exit 1; }
@@ -81,16 +85,16 @@ db-migrate: ## Apply database migrations
 	@db/migrate.sh
 
 dev-api: ## Run the local transit API
-	@test -f services/transit-api/main.go || { echo 'transit API entrypoint missing: services/transit-api/main.go (WP-07)'; exit 1; }
-	@go run ./services/transit-api
+	@test -f services/transit-api/cmd/transit-api/main.go || { echo 'transit API entrypoint missing: services/transit-api/cmd/transit-api/main.go'; exit 1; }
+	@go run ./services/transit-api/cmd/transit-api
 
 dev-mobile: ## Run the Expo mobile development client
 	@test -f apps/mobile/package.json || { echo 'mobile app missing: apps/mobile/package.json (WP-08)'; exit 1; }
 	@corepack pnpm --dir apps/mobile start -- --dev-client
 
 dev-poller: ## Run the local realtime poller
-	@test -f services/realtime-poller/main.go || { echo 'realtime poller entrypoint missing: services/realtime-poller/main.go (WP-05)'; exit 1; }
-	@go run ./services/realtime-poller
+	@test -f services/realtime-poller/cmd/realtime-poller/main.go || { echo 'realtime poller entrypoint missing: services/realtime-poller/cmd/realtime-poller/main.go'; exit 1; }
+	@go run ./services/realtime-poller/cmd/realtime-poller
 
 build: ## Build JavaScript packages and Go binaries
 	@corepack pnpm build

@@ -265,6 +265,7 @@ type AppNotificationDelivery struct {
 	SentAt           pgtype.Timestamptz            `json:"sent_at"`
 	CreatedAt        pgtype.Timestamptz            `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz            `json:"updated_at"`
+	ClaimToken       pgtype.UUID                   `json:"claim_token"`
 }
 
 type AppNotificationReceipt struct {

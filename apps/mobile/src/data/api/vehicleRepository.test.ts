@@ -17,7 +17,7 @@ describe("VehicleRepository", () => {
     });
     const history = await repository.history("fixture:vehicle:2901");
     expect(history.vehicleId).toBe("fixture:vehicle:2901");
-    expect(history.observations[0]?.observedAt).toBe("2026-07-22T16:15:02Z");
+    expect(history.observations[0]?.observedAt).toBe("2026-07-22T16:30:02Z");
     await expect(
       repository.history("fixture:vehicle:unknown"),
     ).resolves.toMatchObject({
@@ -85,6 +85,17 @@ describe("VehicleRepository", () => {
     await expect(repository.vehicles()).resolves.toEqual(first);
     expect(request.mock.calls[1]?.[1]?.headers).toEqual({
       "If-None-Match": '"snapshot"',
+    });
+  });
+
+  it("does not convert a missing Retry-After header to an immediate retry", async () => {
+    const repository = new VehicleRepository(
+      { apiMode: "remote", apiBaseUrl: "https://api.example.test" },
+      vi.fn().mockResolvedValue(new Response(null, { status: 503 })),
+    );
+    await expect(repository.vehicles()).rejects.toMatchObject({
+      kind: "source_unavailable",
+      retryAfterSeconds: undefined,
     });
   });
 });

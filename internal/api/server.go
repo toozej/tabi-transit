@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -44,6 +45,7 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 	r.Get("/health/ready", s.readiness)
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/config", s.getConfig)
+		r.Get("/static/manifest", s.staticManifest)
 		r.Post("/installations", s.createInstallation)
 		r.Put("/installations/{id}/push-token", s.registerPushToken)
 		r.Delete("/installations/{id}", s.deleteInstallation)
@@ -71,6 +73,23 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 		r.Get("/vehicles/{id}", s.vehicle)
 	})
 	return r
+}
+
+// staticManifest is deliberately artifact-free until artifact storage and
+// retention are configured. A valid empty manifest still lets mobile clients
+// synchronize the active static-feed version without receiving a 404.
+func (s *Server) staticManifest(w http.ResponseWriter, r *http.Request) {
+	published := s.config.API.StaticFeedPublishedAt.UTC()
+	if published.IsZero() {
+		published = time.Unix(0, 0).UTC()
+	}
+	w.Header().Set("X-Static-Feed-Version", s.config.API.StaticFeedVersion)
+	s.etag(w, r, map[string]any{
+		"staticFeedVersion": s.config.API.StaticFeedVersion,
+		"publishedAt":       published.Format(time.RFC3339),
+		"artifacts":         []any{},
+		"freshness":         staticFreshness(published),
+	})
 }
 
 // The external-place endpoints deliberately fail closed until their documented
@@ -864,9 +883,19 @@ func (s *Server) etag(w http.ResponseWriter, r *http.Request, body any) {
 	_, _ = w.Write(b)
 }
 func parseCoordinate(r *http.Request, w http.ResponseWriter) (float64, float64, bool) {
-	lat, e1 := strconv.ParseFloat(r.URL.Query().Get("latitude"), 64)
-	lon, e2 := strconv.ParseFloat(r.URL.Query().Get("longitude"), 64)
-	if e1 != nil || e2 != nil || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+	latitude := r.URL.Query().Get("latitude")
+	longitude := r.URL.Query().Get("longitude")
+	// Accept the documented compact spellings too while existing clients move
+	// to the canonical latitude/longitude names.
+	if latitude == "" {
+		latitude = r.URL.Query().Get("lat")
+	}
+	if longitude == "" {
+		longitude = r.URL.Query().Get("lon")
+	}
+	lat, e1 := strconv.ParseFloat(latitude, 64)
+	lon, e2 := strconv.ParseFloat(longitude, 64)
+	if e1 != nil || e2 != nil || math.IsNaN(lat) || math.IsNaN(lon) || math.IsInf(lat, 0) || math.IsInf(lon, 0) || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
 		writeValidation(w, r, "latitude", "invalid")
 		return 0, 0, false
 	}
@@ -1248,7 +1277,16 @@ func vehicleJSON(v persistence.Vehicle, now time.Time) map[string]any {
 	return m
 }
 func freshness(v persistence.Vehicle, now time.Time) map[string]any {
-	m := map[string]any{"source": v.SourceID, "fetchedAt": v.FetchedAt.UTC().Format(time.RFC3339), "processedAt": v.ProcessedAt.UTC().Format(time.RFC3339), "status": v.Freshness, "ageSeconds": int(maxDuration(0, now.Sub(v.FetchedAt)).Seconds()), "isRealtime": true}
+	age := maxDuration(0, now.Sub(v.FetchedAt))
+	status := v.Freshness
+	// Stored ingest status is only a snapshot. Re-evaluate it at read time so
+	// an outage cannot leave a previously fresh projection reported as fresh.
+	if age > 90*time.Second {
+		status = persistence.FreshnessStale
+	} else if age > 45*time.Second && status == persistence.FreshnessFresh {
+		status = persistence.FreshnessAging
+	}
+	m := map[string]any{"source": v.SourceID, "fetchedAt": v.FetchedAt.UTC().Format(time.RFC3339), "processedAt": v.ProcessedAt.UTC().Format(time.RFC3339), "status": status, "ageSeconds": int(age.Seconds()), "isRealtime": true}
 	if v.SourceUpdatedAt != nil {
 		m["sourceUpdatedAt"] = v.SourceUpdatedAt.UTC().Format(time.RFC3339)
 	}
@@ -1303,10 +1341,7 @@ func newRateLimiter(c config.RateLimit) *rateLimiter {
 }
 func (s *Server) limit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, e := net.SplitHostPort(r.RemoteAddr)
-		if e != nil {
-			host = r.RemoteAddr
-		}
+		host := clientAddress(r)
 		if !s.limiter.allow(host) {
 			w.Header().Set("Retry-After", strconv.Itoa(int(s.limiter.cfg.Window.Seconds())))
 			s.error(w, r, http.StatusTooManyRequests, "rate_limited", "Too many requests.", map[string]any{"retryAfterSeconds": int(s.limiter.cfg.Window.Seconds())})
@@ -1315,10 +1350,30 @@ func (s *Server) limit(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+func clientAddress(r *http.Request) string {
+	// The API is reachable only through Caddy in production; use the first
+	// forwarded address that Caddy supplies so all riders do not share its
+	// container address. Direct development requests retain RemoteAddr.
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); net.ParseIP(forwarded) != nil {
+		return forwarded
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
 func (l *rateLimiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
+	// Expire inactive keys while servicing traffic, bounding memory even when
+	// an attacker rotates source addresses.
+	for existing, entry := range l.buckets {
+		if now.Sub(entry.start) >= l.cfg.Window {
+			delete(l.buckets, existing)
+		}
+	}
 	b := l.buckets[key]
 	if b == nil || now.Sub(b.start) >= l.cfg.Window {
 		l.buckets[key] = &bucket{n: 1, start: now}

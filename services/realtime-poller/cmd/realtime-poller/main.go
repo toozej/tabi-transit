@@ -19,7 +19,8 @@ import (
 func main() {
 	pollConfig, err := poller.DefaultConfig()
 	if errors.Is(err, poller.ErrDisabled) {
-		return
+		fmt.Fprintln(os.Stderr, "GTFS-Realtime vehicle or trip-updates endpoint must be configured")
+		os.Exit(2)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

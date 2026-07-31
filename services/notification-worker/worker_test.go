@@ -15,19 +15,23 @@ type fakeStore struct {
 func (s *fakeStore) Claim(_ context.Context, _ time.Time, _ int) ([]Delivery, error) {
 	return s.deliveries, nil
 }
-func (s *fakeStore) MarkSent(_ context.Context, id, _ string, _ time.Time) error {
+func (s *fakeStore) ExpirePending(_ context.Context, _ time.Time) error {
+	s.calls = append(s.calls, "expire-pending")
+	return nil
+}
+func (s *fakeStore) MarkSent(_ context.Context, id, _, _ string, _ time.Time) error {
 	s.calls = append(s.calls, "sent:"+id)
 	return nil
 }
-func (s *fakeStore) MarkRetry(_ context.Context, id string, _ time.Time, code string, _ time.Time) error {
+func (s *fakeStore) MarkRetry(_ context.Context, id, _ string, _ time.Time, code string, _ time.Time) error {
 	s.calls = append(s.calls, "retry:"+id+":"+code)
 	return nil
 }
-func (s *fakeStore) MarkExpired(_ context.Context, id string, _ time.Time) error {
+func (s *fakeStore) MarkExpired(_ context.Context, id, _ string, _ time.Time) error {
 	s.calls = append(s.calls, "expired:"+id)
 	return nil
 }
-func (s *fakeStore) MarkFailed(_ context.Context, id, code string, _ time.Time) error {
+func (s *fakeStore) MarkFailed(_ context.Context, id, _, code string, _ time.Time) error {
 	s.calls = append(s.calls, "failed:"+id+":"+code)
 	return nil
 }
@@ -55,7 +59,7 @@ func TestRunOnceNeverRetriesExpiredAndDisablesInvalidTokens(t *testing.T) {
 	if _, err := service.RunOnce(context.Background(), 2); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"expired:expired", "disabled:token-1:invalid_token", "failed:bad-token:invalid_token"}
+	want := []string{"expire-pending", "expired:expired", "failed:bad-token:invalid_token", "disabled:token-1:invalid_token"}
 	if len(store.calls) != len(want) {
 		t.Fatalf("calls = %#v", store.calls)
 	}
@@ -73,7 +77,7 @@ func TestRunOnceDefersQuietHoursOnlyBeforeExpiry(t *testing.T) {
 	if _, err := service.RunOnce(context.Background(), 2); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"retry:defer:quiet_hours", "expired:expire"}
+	want := []string{"expire-pending", "retry:defer:quiet_hours", "expired:expire"}
 	for i := range want {
 		if store.calls[i] != want[i] {
 			t.Fatalf("calls = %#v", store.calls)
@@ -88,7 +92,7 @@ func TestRunOnceBoundsRetries(t *testing.T) {
 	if _, err := service.RunOnce(context.Background(), 2); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"retry:retry:push_unavailable", "failed:max:push_unavailable"}
+	want := []string{"expire-pending", "retry:retry:push_unavailable", "failed:max:push_unavailable"}
 	for i := range want {
 		if store.calls[i] != want[i] {
 			t.Fatalf("calls = %#v", store.calls)

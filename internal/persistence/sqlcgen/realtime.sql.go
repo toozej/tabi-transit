@@ -64,7 +64,9 @@ SELECT EXISTS (
   JOIN realtime.snapshots snapshot ON snapshot.id = vehicle.snapshot_id
   JOIN ops.source_health health ON health.source_id = vehicle.source_id
   WHERE snapshot.is_valid
+    AND snapshot.fetched_at >= now() - interval '90 seconds'
     AND health.last_valid_snapshot_at IS NOT NULL
+    AND health.last_success_at >= now() - interval '90 seconds'
 )
 `
 

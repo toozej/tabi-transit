@@ -24,6 +24,9 @@ func (q *fakeNotificationQueries) ClaimNotificationDeliveries(_ context.Context,
 func (*fakeNotificationQueries) DisablePushToken(context.Context, sqlcgen.DisablePushTokenParams) error {
 	return nil
 }
+func (*fakeNotificationQueries) ExpirePendingDeliveries(context.Context, pgtype.Timestamptz) (int64, error) {
+	return 0, nil
+}
 func (*fakeNotificationQueries) MarkNotificationDeliverySent(context.Context, sqlcgen.MarkNotificationDeliverySentParams) (int64, error) {
 	return 1, nil
 }
@@ -89,14 +92,14 @@ func TestPostgresStoreClaimDecryptsAfterClaim(t *testing.T) {
 	queries.rows = []sqlcgen.ClaimNotificationDeliveriesRow{{
 		ID: testUUID(t, "123e4567-e89b-12d3-a456-426614174000"), PushTokenID: testUUID(t, "123e4567-e89b-12d3-a456-426614174001"), SubscriptionID: testUUID(t, subscriptionID),
 		NotificationType: "service_alert", Payload: []byte(`{"entityId":"alert-1","deepLink":"tabi://alerts/alert-1","subscriptionId":"123e4567-e89b-12d3-a456-426614174002"}`),
-		ExpiresAt: pgTimestamp(time.Now().Add(time.Hour)), Attempts: 1, TokenCiphertext: ciphertext.Ciphertext, EncryptionKeyID: ciphertext.KeyID,
+		ExpiresAt: pgTimestamp(time.Now().Add(time.Hour)), Attempts: 1, ClaimToken: testUUID(t, "123e4567-e89b-12d3-a456-426614174003"), DedupeKey: "dedupe-key", TokenCiphertext: ciphertext.Ciphertext, EncryptionKeyID: ciphertext.KeyID,
 		QuietStart: pgtype.Time{Microseconds: 22 * int64(time.Hour/time.Microsecond), Valid: true}, QuietEnd: pgtype.Time{Microseconds: 7 * int64(time.Hour/time.Microsecond), Valid: true}, QuietTimeZone: pgText("America/Los_Angeles"),
 	}}
 	got, err := store.Claim(context.Background(), time.Now(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].PushToken != "opaque-token" || got[0].QuietHours == nil || got[0].QuietHours.Start != "22:00" {
+	if len(got) != 1 || got[0].PushToken != "opaque-token" || got[0].ClaimToken == "" || got[0].IdempotencyKey != "dedupe-key" || got[0].QuietHours == nil || got[0].QuietHours.Start != "22:00" {
 		t.Fatalf("claim = %#v", got)
 	}
 }
@@ -106,7 +109,7 @@ func TestPostgresStoreClaimMakesUndecryptableRowsTerminal(t *testing.T) {
 	subscriptionID := "123e4567-e89b-12d3-a456-426614174002"
 	queries := &fakeNotificationQueries{rows: []sqlcgen.ClaimNotificationDeliveriesRow{{
 		ID: testUUID(t, "123e4567-e89b-12d3-a456-426614174000"), PushTokenID: testUUID(t, "123e4567-e89b-12d3-a456-426614174001"), SubscriptionID: testUUID(t, subscriptionID),
-		Payload: []byte(`{"entityId":"alert-1","deepLink":"tabi://alerts/alert-1","subscriptionId":"123e4567-e89b-12d3-a456-426614174002"}`), ExpiresAt: pgTimestamp(time.Now().Add(time.Hour)), TokenCiphertext: []byte("not-a-ciphertext"), EncryptionKeyID: "test-key",
+		Payload: []byte(`{"entityId":"alert-1","deepLink":"tabi://alerts/alert-1","subscriptionId":"123e4567-e89b-12d3-a456-426614174002"}`), ExpiresAt: pgTimestamp(time.Now().Add(time.Hour)), ClaimToken: testUUID(t, "123e4567-e89b-12d3-a456-426614174003"), TokenCiphertext: []byte("not-a-ciphertext"), EncryptionKeyID: "test-key",
 	}}}
 	store := testStore(t, queries, &fakeReceiptTx{})
 	got, err := store.Claim(context.Background(), time.Now(), 1)
@@ -144,7 +147,7 @@ func TestPostgresStoreReceiptRollsBackOnWriteFailure(t *testing.T) {
 func TestPostgresStoreRejectsUnsafeTransitionValues(t *testing.T) {
 	t.Parallel()
 	store := testStore(t, &fakeNotificationQueries{}, &fakeReceiptTx{})
-	if err := store.MarkRetry(context.Background(), "not-a-uuid", time.Now(), "provider body: opaque-token", time.Now()); err == nil {
+	if err := store.MarkRetry(context.Background(), "not-a-uuid", "123e4567-e89b-12d3-a456-426614174003", time.Now(), "provider body: opaque-token", time.Now()); err == nil {
 		t.Fatal("unsafe error code accepted")
 	}
 	if err := store.RecordReceipt(context.Background(), Receipt{TicketID: "ticket\nsecret", Status: "ok", ReceivedAt: time.Now()}, time.Now()); !errors.Is(err, ErrInvalidNotificationReceipt) {

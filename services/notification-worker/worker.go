@@ -16,11 +16,15 @@ var ErrInvalidPushToken = errors.New("push token is invalid")
 const maxAttempts = 3
 
 type Delivery struct {
-	ID, TokenID, SubscriptionID, Type, EntityID, DeepLink string
-	PushToken                                             string
-	ExpiresAt                                             time.Time
-	Attempts                                              int
-	QuietHours                                            *QuietHours
+	ID, ClaimToken, TokenID, SubscriptionID, Type, EntityID, DeepLink string
+	// IdempotencyKey is stable for the materialized delivery. Push gateways
+	// should forward it to providers that support idempotency; it is distinct
+	// from the per-lease ClaimToken used only for local state transitions.
+	IdempotencyKey string
+	PushToken      string
+	ExpiresAt      time.Time
+	Attempts       int
+	QuietHours     *QuietHours
 }
 
 // QuietHours uses the installation's validated IANA timezone. Start equal to
@@ -32,10 +36,11 @@ type QuietHours struct {
 
 type Store interface {
 	Claim(context.Context, time.Time, int) ([]Delivery, error)
-	MarkSent(context.Context, string, string, time.Time) error
-	MarkRetry(context.Context, string, time.Time, string, time.Time) error
-	MarkExpired(context.Context, string, time.Time) error
-	MarkFailed(context.Context, string, string, time.Time) error
+	ExpirePending(context.Context, time.Time) error
+	MarkSent(context.Context, string, string, string, time.Time) error
+	MarkRetry(context.Context, string, string, time.Time, string, time.Time) error
+	MarkExpired(context.Context, string, string, time.Time) error
+	MarkFailed(context.Context, string, string, string, time.Time) error
 	DisableToken(context.Context, string, string, time.Time) error
 }
 
@@ -81,30 +86,33 @@ func (s Service) RunOnce(ctx context.Context, limit int) (int, error) {
 	if s.Clock != nil {
 		now = s.Clock().UTC()
 	}
+	if err := s.Store.ExpirePending(ctx, now); err != nil {
+		return 0, fmt.Errorf("expire notification deliveries: %w", err)
+	}
 	deliveries, err := s.Store.Claim(ctx, now, limit)
 	if err != nil {
 		return 0, fmt.Errorf("claim notification deliveries: %w", err)
 	}
 	for _, delivery := range deliveries {
 		if !delivery.ExpiresAt.After(now) {
-			if err := s.Store.MarkExpired(ctx, delivery.ID, now); err != nil {
+			if err := s.Store.MarkExpired(ctx, delivery.ID, delivery.ClaimToken, now); err != nil {
 				return 0, err
 			}
 			continue
 		}
 		quietUntil, quiet, err := quietUntil(delivery.QuietHours, now)
 		if err != nil {
-			if err := s.Store.MarkFailed(ctx, delivery.ID, "invalid_quiet_hours", now); err != nil {
+			if err := s.Store.MarkFailed(ctx, delivery.ID, delivery.ClaimToken, "invalid_quiet_hours", now); err != nil {
 				return 0, err
 			}
 			continue
 		}
 		if quiet {
 			if !delivery.ExpiresAt.After(quietUntil) {
-				if err := s.Store.MarkExpired(ctx, delivery.ID, now); err != nil {
+				if err := s.Store.MarkExpired(ctx, delivery.ID, delivery.ClaimToken, now); err != nil {
 					return 0, err
 				}
-			} else if err := s.Store.MarkRetry(ctx, delivery.ID, quietUntil, "quiet_hours", now); err != nil {
+			} else if err := s.Store.MarkRetry(ctx, delivery.ID, delivery.ClaimToken, quietUntil, "quiet_hours", now); err != nil {
 				return 0, err
 			}
 			continue
@@ -112,29 +120,31 @@ func (s Service) RunOnce(ctx context.Context, limit int) (int, error) {
 		ticketID, sendErr := s.Gateway.Send(ctx, delivery)
 		switch {
 		case sendErr == nil:
-			if err := s.Store.MarkSent(ctx, delivery.ID, ticketID, now); err != nil {
+			if err := s.Store.MarkSent(ctx, delivery.ID, delivery.ClaimToken, ticketID, now); err != nil {
 				return 0, err
 			}
 		case errors.Is(sendErr, ErrInvalidPushToken):
-			if err := s.Store.DisableToken(ctx, delivery.TokenID, "invalid_token", now); err != nil {
+			// Terminalize first: a failed token update must not leave this
+			// delivery leased in sending state indefinitely.
+			if err := s.Store.MarkFailed(ctx, delivery.ID, delivery.ClaimToken, "invalid_token", now); err != nil {
 				return 0, err
 			}
-			if err := s.Store.MarkFailed(ctx, delivery.ID, "invalid_token", now); err != nil {
+			if err := s.Store.DisableToken(ctx, delivery.TokenID, "invalid_token", now); err != nil {
 				return 0, err
 			}
 		// Claim increments Attempts transactionally before delivery. A third
 		// failed send is terminal; we do not create a fourth network attempt.
 		case delivery.Attempts >= maxAttempts:
-			if err := s.Store.MarkFailed(ctx, delivery.ID, "push_unavailable", now); err != nil {
+			if err := s.Store.MarkFailed(ctx, delivery.ID, delivery.ClaimToken, "push_unavailable", now); err != nil {
 				return 0, err
 			}
 		default:
 			next := now.Add(time.Duration(delivery.Attempts+1) * time.Minute)
 			if !delivery.ExpiresAt.After(next) {
-				if err := s.Store.MarkExpired(ctx, delivery.ID, now); err != nil {
+				if err := s.Store.MarkExpired(ctx, delivery.ID, delivery.ClaimToken, now); err != nil {
 					return 0, err
 				}
-			} else if err := s.Store.MarkRetry(ctx, delivery.ID, next, "push_unavailable", now); err != nil {
+			} else if err := s.Store.MarkRetry(ctx, delivery.ID, delivery.ClaimToken, next, "push_unavailable", now); err != nil {
 				return 0, err
 			}
 		}

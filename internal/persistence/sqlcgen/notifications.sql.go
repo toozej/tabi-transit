@@ -32,15 +32,17 @@ WITH candidates AS (
 ), claimed AS (
   UPDATE app.notification_deliveries d
   SET status = 'sending', attempts = d.attempts + 1,
-      claim_until = $4, updated_at = $1
+      claim_until = $4, claim_token = $5,
+      updated_at = $1
   FROM candidates c
   WHERE d.id = c.id
   RETURNING d.id, d.subscription_id, d.push_token_id, d.notification_type,
-            d.payload, d.expires_at, d.attempts
+            d.payload, d.expires_at, d.attempts, d.claim_token, d.dedupe_key
 )
 SELECT claimed.id, claimed.subscription_id, claimed.push_token_id,
        claimed.notification_type, claimed.payload, claimed.expires_at,
-       claimed.attempts, token.token_ciphertext, token.encryption_key_id,
+       claimed.attempts, claimed.claim_token, claimed.dedupe_key,
+       token.token_ciphertext, token.encryption_key_id,
        subscription.quiet_start, subscription.quiet_end, subscription.quiet_time_zone
 FROM claimed
 JOIN app.push_tokens token ON token.id = claimed.push_token_id
@@ -53,6 +55,7 @@ type ClaimNotificationDeliveriesParams struct {
 	MaxAttempts int16              `json:"max_attempts"`
 	RowLimit    int32              `json:"row_limit"`
 	ClaimUntil  pgtype.Timestamptz `json:"claim_until"`
+	ClaimToken  pgtype.UUID        `json:"claim_token"`
 }
 
 type ClaimNotificationDeliveriesRow struct {
@@ -63,6 +66,8 @@ type ClaimNotificationDeliveriesRow struct {
 	Payload          []byte             `json:"payload"`
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 	Attempts         int16              `json:"attempts"`
+	ClaimToken       pgtype.UUID        `json:"claim_token"`
+	DedupeKey        string             `json:"dedupe_key"`
 	TokenCiphertext  []byte             `json:"token_ciphertext"`
 	EncryptionKeyID  string             `json:"encryption_key_id"`
 	QuietStart       pgtype.Time        `json:"quiet_start"`
@@ -79,6 +84,7 @@ func (q *Queries) ClaimNotificationDeliveries(ctx context.Context, arg ClaimNoti
 		arg.MaxAttempts,
 		arg.RowLimit,
 		arg.ClaimUntil,
+		arg.ClaimToken,
 	)
 	if err != nil {
 		return nil, err
@@ -95,6 +101,8 @@ func (q *Queries) ClaimNotificationDeliveries(ctx context.Context, arg ClaimNoti
 			&i.Payload,
 			&i.ExpiresAt,
 			&i.Attempts,
+			&i.ClaimToken,
+			&i.DedupeKey,
 			&i.TokenCiphertext,
 			&i.EncryptionKeyID,
 			&i.QuietStart,
@@ -154,7 +162,8 @@ func (q *Queries) DisableTokenForInvalidReceipt(ctx context.Context, arg Disable
 
 const expirePendingDeliveries = `-- name: ExpirePendingDeliveries :execrows
 UPDATE app.notification_deliveries
-SET status = 'expired', next_attempt_at = NULL, updated_at = $1
+SET status = 'expired', claim_until = NULL, claim_token = NULL,
+    next_attempt_at = NULL, updated_at = $1
 WHERE status IN ('pending', 'retry_pending', 'sending')
   AND expires_at <= $1
 `
@@ -178,7 +187,8 @@ INSERT INTO app.notification_deliveries (
   $4, $5, $6,
   $7, $8, 'pending', $9
 )
-ON CONFLICT (dedupe_key) DO NOTHING
+ON CONFLICT (dedupe_key) DO UPDATE
+SET dedupe_key = EXCLUDED.dedupe_key
 RETURNING id
 `
 
@@ -196,6 +206,9 @@ type InsertNotificationDeliveryParams struct {
 
 // The unique dedupe_key is the concurrency boundary: concurrent workers may
 // attempt the same event, but only one delivery is materialized.
+// A duplicate is an expected outcome of concurrent event evaluation. Return
+// the already-materialized delivery instead of making callers handle it as a
+// missing row.
 func (q *Queries) InsertNotificationDelivery(ctx context.Context, arg InsertNotificationDeliveryParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, insertNotificationDelivery,
 		arg.ID,
@@ -215,18 +228,20 @@ func (q *Queries) InsertNotificationDelivery(ctx context.Context, arg InsertNoti
 
 const markNotificationDeliveryExpired = `-- name: MarkNotificationDeliveryExpired :execrows
 UPDATE app.notification_deliveries
-SET status = 'expired', claim_until = NULL, next_attempt_at = NULL,
+SET status = 'expired', claim_until = NULL, claim_token = NULL, next_attempt_at = NULL,
     updated_at = $1
-WHERE id = $2 AND status IN ('pending', 'retry_pending', 'sending')
+WHERE id = $2 AND status = 'sending'
+  AND claim_token = $3
 `
 
 type MarkNotificationDeliveryExpiredParams struct {
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	ID        pgtype.UUID        `json:"id"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID         pgtype.UUID        `json:"id"`
+	ClaimToken pgtype.UUID        `json:"claim_token"`
 }
 
 func (q *Queries) MarkNotificationDeliveryExpired(ctx context.Context, arg MarkNotificationDeliveryExpiredParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markNotificationDeliveryExpired, arg.UpdatedAt, arg.ID)
+	result, err := q.db.Exec(ctx, markNotificationDeliveryExpired, arg.UpdatedAt, arg.ID, arg.ClaimToken)
 	if err != nil {
 		return 0, err
 	}
@@ -235,19 +250,26 @@ func (q *Queries) MarkNotificationDeliveryExpired(ctx context.Context, arg MarkN
 
 const markNotificationDeliveryFailed = `-- name: MarkNotificationDeliveryFailed :execrows
 UPDATE app.notification_deliveries
-SET status = 'failed', claim_until = NULL, next_attempt_at = NULL,
+SET status = 'failed', claim_until = NULL, claim_token = NULL, next_attempt_at = NULL,
     last_error_code = $1, updated_at = $2
 WHERE id = $3 AND status = 'sending'
+  AND claim_token = $4
 `
 
 type MarkNotificationDeliveryFailedParams struct {
-	ErrorCode pgtype.Text        `json:"error_code"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	ID        pgtype.UUID        `json:"id"`
+	ErrorCode  pgtype.Text        `json:"error_code"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID         pgtype.UUID        `json:"id"`
+	ClaimToken pgtype.UUID        `json:"claim_token"`
 }
 
 func (q *Queries) MarkNotificationDeliveryFailed(ctx context.Context, arg MarkNotificationDeliveryFailedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markNotificationDeliveryFailed, arg.ErrorCode, arg.UpdatedAt, arg.ID)
+	result, err := q.db.Exec(ctx, markNotificationDeliveryFailed,
+		arg.ErrorCode,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ClaimToken,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -257,9 +279,10 @@ func (q *Queries) MarkNotificationDeliveryFailed(ctx context.Context, arg MarkNo
 const markNotificationDeliveryRetry = `-- name: MarkNotificationDeliveryRetry :execrows
 UPDATE app.notification_deliveries
 SET status = 'retry_pending', next_attempt_at = $1,
-    claim_until = NULL, last_error_code = $2,
+    claim_until = NULL, claim_token = NULL, last_error_code = $2,
     updated_at = $3
 WHERE id = $4 AND status = 'sending'
+  AND claim_token = $5
 `
 
 type MarkNotificationDeliveryRetryParams struct {
@@ -267,6 +290,7 @@ type MarkNotificationDeliveryRetryParams struct {
 	ErrorCode     pgtype.Text        `json:"error_code"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	ID            pgtype.UUID        `json:"id"`
+	ClaimToken    pgtype.UUID        `json:"claim_token"`
 }
 
 func (q *Queries) MarkNotificationDeliveryRetry(ctx context.Context, arg MarkNotificationDeliveryRetryParams) (int64, error) {
@@ -275,6 +299,7 @@ func (q *Queries) MarkNotificationDeliveryRetry(ctx context.Context, arg MarkNot
 		arg.ErrorCode,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.ClaimToken,
 	)
 	if err != nil {
 		return 0, err
@@ -285,21 +310,29 @@ func (q *Queries) MarkNotificationDeliveryRetry(ctx context.Context, arg MarkNot
 const markNotificationDeliverySent = `-- name: MarkNotificationDeliverySent :execrows
 UPDATE app.notification_deliveries
 SET status = 'sent', provider_ticket_id = $1,
-    sent_at = $2, claim_until = NULL, next_attempt_at = NULL,
+    sent_at = $2, claim_until = NULL, claim_token = NULL,
+    next_attempt_at = NULL,
     last_error_code = NULL, updated_at = $2
 WHERE id = $3 AND status = 'sending'
+  AND claim_token = $4
 `
 
 type MarkNotificationDeliverySentParams struct {
 	ProviderTicketID pgtype.Text        `json:"provider_ticket_id"`
 	SentAt           pgtype.Timestamptz `json:"sent_at"`
 	ID               pgtype.UUID        `json:"id"`
+	ClaimToken       pgtype.UUID        `json:"claim_token"`
 }
 
 // A delivery can only become sent while held by a worker. This prevents a
 // late worker from overwriting a recovered lease or a terminal transition.
 func (q *Queries) MarkNotificationDeliverySent(ctx context.Context, arg MarkNotificationDeliverySentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markNotificationDeliverySent, arg.ProviderTicketID, arg.SentAt, arg.ID)
+	result, err := q.db.Exec(ctx, markNotificationDeliverySent,
+		arg.ProviderTicketID,
+		arg.SentAt,
+		arg.ID,
+		arg.ClaimToken,
+	)
 	if err != nil {
 		return 0, err
 	}

@@ -100,17 +100,22 @@ export class VehicleRepository {
 
   async history(id: string): Promise<VehicleHistory> {
     if (this.runtime.apiMode === "fixture") {
-      return (
-        fixtureVehicleHistory[id] ?? {
-          vehicleId: id,
-          observations: [],
-          retentionDays: 30,
-          freshness: {
-            status: "historical",
-            source: "normalized-vehicle-observations",
-          },
-        }
-      );
+      const history = fixtureVehicleHistory[id] ?? {
+        vehicleId: id,
+        observations: [],
+        retentionDays: 30,
+        freshness: {
+          status: "historical",
+          source: "normalized-vehicle-observations",
+        },
+      };
+      return {
+        ...history,
+        observations: [...history.observations].sort(
+          (left, right) =>
+            Date.parse(right.observedAt) - Date.parse(left.observedAt),
+        ),
+      };
     }
     return this.get(
       `/v1/vehicles/${encodeURIComponent(id)}/history`,
@@ -133,13 +138,14 @@ export class VehicleRepository {
     }
     if (response.status === 304 && cached) return cached.value;
     if (!response.ok) {
-      const retry = Number(response.headers.get("Retry-After"));
+      const retryAfter = response.headers.get("Retry-After");
+      const retry = retryAfter === null ? undefined : Number(retryAfter);
       throw new ApiError(
         response.status === 503
           ? "Vehicle positions are temporarily unavailable."
           : "The Tabi API returned an error.",
         response.status === 503 ? "source_unavailable" : "http",
-        Number.isFinite(retry) ? retry : undefined,
+        retry !== undefined && Number.isFinite(retry) ? retry : undefined,
       );
     }
     let body: unknown;

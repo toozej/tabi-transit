@@ -2,6 +2,7 @@ package notificationworker
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ type PostgresStore struct {
 
 type notificationQueries interface {
 	ClaimNotificationDeliveries(context.Context, sqlcgen.ClaimNotificationDeliveriesParams) ([]sqlcgen.ClaimNotificationDeliveriesRow, error)
+	ExpirePendingDeliveries(context.Context, pgtype.Timestamptz) (int64, error)
 	DisablePushToken(context.Context, sqlcgen.DisablePushTokenParams) error
 	MarkNotificationDeliverySent(context.Context, sqlcgen.MarkNotificationDeliverySentParams) (int64, error)
 	MarkNotificationDeliveryRetry(context.Context, sqlcgen.MarkNotificationDeliveryRetryParams) (int64, error)
@@ -106,8 +108,12 @@ func (s *PostgresStore) Claim(ctx context.Context, now time.Time, limit int) ([]
 		lease = defaultClaimLease
 	}
 	now = now.UTC()
+	claimToken, err := newClaimToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate notification claim token: %w", err)
+	}
 	rows, err := s.queries.ClaimNotificationDeliveries(ctx, sqlcgen.ClaimNotificationDeliveriesParams{
-		NowAt: pgTimestamp(now), MaxAttempts: maxAttempts, RowLimit: int32(limit), ClaimUntil: pgTimestamp(now.Add(lease)),
+		NowAt: pgTimestamp(now), MaxAttempts: maxAttempts, RowLimit: int32(limit), ClaimUntil: pgTimestamp(now.Add(lease)), ClaimToken: claimToken,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("claim notification deliveries: %w", err)
@@ -128,7 +134,7 @@ func (s *PostgresStore) Claim(ctx context.Context, now time.Time, limit int) ([]
 					code = "token_decryption_failed"
 				}
 				_, markErr := s.queries.MarkNotificationDeliveryFailed(ctx, sqlcgen.MarkNotificationDeliveryFailedParams{
-					ID: parsedID, ErrorCode: pgText(code), UpdatedAt: pgTimestamp(now),
+					ID: parsedID, ClaimToken: row.ClaimToken, ErrorCode: pgText(code), UpdatedAt: pgTimestamp(now),
 				})
 				if markErr != nil {
 					return nil, fmt.Errorf("mark malformed notification delivery: %w", markErr)
@@ -157,6 +163,10 @@ func (s *PostgresStore) deliveryFromClaim(row sqlcgen.ClaimNotificationDeliverie
 	if err != nil {
 		return Delivery{}, err
 	}
+	claimToken, err := uuidString(row.ClaimToken)
+	if err != nil {
+		return Delivery{}, err
+	}
 	var payload struct {
 		EntityID       string `json:"entityId"`
 		DeepLink       string `json:"deepLink"`
@@ -173,10 +183,18 @@ func (s *PostgresStore) deliveryFromClaim(row sqlcgen.ClaimNotificationDeliverie
 	if err != nil {
 		return Delivery{}, err
 	}
-	return Delivery{ID: id, TokenID: tokenID, SubscriptionID: subscriptionID, Type: row.NotificationType, EntityID: payload.EntityID, DeepLink: payload.DeepLink, PushToken: string(plaintext), ExpiresAt: row.ExpiresAt.Time.UTC(), Attempts: int(row.Attempts), QuietHours: quiet}, nil
+	return Delivery{ID: id, ClaimToken: claimToken, TokenID: tokenID, SubscriptionID: subscriptionID, Type: row.NotificationType, EntityID: payload.EntityID, DeepLink: payload.DeepLink, IdempotencyKey: row.DedupeKey, PushToken: string(plaintext), ExpiresAt: row.ExpiresAt.Time.UTC(), Attempts: int(row.Attempts), QuietHours: quiet}, nil
 }
 
-func (s *PostgresStore) MarkSent(ctx context.Context, id, ticketID string, at time.Time) error {
+func (s *PostgresStore) ExpirePending(ctx context.Context, now time.Time) error {
+	if s == nil || s.queries == nil {
+		return errors.New("notification store is not configured")
+	}
+	_, err := s.queries.ExpirePendingDeliveries(ctx, pgTimestamp(now))
+	return err
+}
+
+func (s *PostgresStore) MarkSent(ctx context.Context, id, claimToken, ticketID string, at time.Time) error {
 	if strings.TrimSpace(ticketID) == "" || len(ticketID) > 256 || strings.ContainsAny(ticketID, "\r\n\x00") {
 		return errors.New("invalid provider ticket ID")
 	}
@@ -184,11 +202,15 @@ func (s *PostgresStore) MarkSent(ctx context.Context, id, ticketID string, at ti
 	if err != nil {
 		return err
 	}
-	changed, err := s.queries.MarkNotificationDeliverySent(ctx, sqlcgen.MarkNotificationDeliverySentParams{ID: parsedID, ProviderTicketID: pgText(ticketID), SentAt: pgTimestamp(at)})
+	parsedClaimToken, err := parseUUID(claimToken)
+	if err != nil {
+		return err
+	}
+	changed, err := s.queries.MarkNotificationDeliverySent(ctx, sqlcgen.MarkNotificationDeliverySentParams{ID: parsedID, ClaimToken: parsedClaimToken, ProviderTicketID: pgText(ticketID), SentAt: pgTimestamp(at)})
 	return stateChange(changed, err)
 }
 
-func (s *PostgresStore) MarkRetry(ctx context.Context, id string, next time.Time, code string, at time.Time) error {
+func (s *PostgresStore) MarkRetry(ctx context.Context, id, claimToken string, next time.Time, code string, at time.Time) error {
 	if !safeErrorCode(code) || !next.After(time.Time{}) {
 		return errors.New("invalid notification retry transition")
 	}
@@ -196,20 +218,28 @@ func (s *PostgresStore) MarkRetry(ctx context.Context, id string, next time.Time
 	if err != nil {
 		return err
 	}
-	changed, err := s.queries.MarkNotificationDeliveryRetry(ctx, sqlcgen.MarkNotificationDeliveryRetryParams{ID: parsedID, NextAttemptAt: pgTimestamp(next), ErrorCode: pgText(code), UpdatedAt: pgTimestamp(at)})
+	parsedClaimToken, err := parseUUID(claimToken)
+	if err != nil {
+		return err
+	}
+	changed, err := s.queries.MarkNotificationDeliveryRetry(ctx, sqlcgen.MarkNotificationDeliveryRetryParams{ID: parsedID, ClaimToken: parsedClaimToken, NextAttemptAt: pgTimestamp(next), ErrorCode: pgText(code), UpdatedAt: pgTimestamp(at)})
 	return stateChange(changed, err)
 }
 
-func (s *PostgresStore) MarkExpired(ctx context.Context, id string, at time.Time) error {
+func (s *PostgresStore) MarkExpired(ctx context.Context, id, claimToken string, at time.Time) error {
 	parsedID, err := parseUUID(id)
 	if err != nil {
 		return err
 	}
-	changed, err := s.queries.MarkNotificationDeliveryExpired(ctx, sqlcgen.MarkNotificationDeliveryExpiredParams{ID: parsedID, UpdatedAt: pgTimestamp(at)})
+	parsedClaimToken, err := parseUUID(claimToken)
+	if err != nil {
+		return err
+	}
+	changed, err := s.queries.MarkNotificationDeliveryExpired(ctx, sqlcgen.MarkNotificationDeliveryExpiredParams{ID: parsedID, ClaimToken: parsedClaimToken, UpdatedAt: pgTimestamp(at)})
 	return stateChange(changed, err)
 }
 
-func (s *PostgresStore) MarkFailed(ctx context.Context, id, code string, at time.Time) error {
+func (s *PostgresStore) MarkFailed(ctx context.Context, id, claimToken, code string, at time.Time) error {
 	if !safeErrorCode(code) {
 		return errors.New("invalid notification error code")
 	}
@@ -217,7 +247,11 @@ func (s *PostgresStore) MarkFailed(ctx context.Context, id, code string, at time
 	if err != nil {
 		return err
 	}
-	changed, err := s.queries.MarkNotificationDeliveryFailed(ctx, sqlcgen.MarkNotificationDeliveryFailedParams{ID: parsedID, ErrorCode: pgText(code), UpdatedAt: pgTimestamp(at)})
+	parsedClaimToken, err := parseUUID(claimToken)
+	if err != nil {
+		return err
+	}
+	changed, err := s.queries.MarkNotificationDeliveryFailed(ctx, sqlcgen.MarkNotificationDeliveryFailedParams{ID: parsedID, ClaimToken: parsedClaimToken, ErrorCode: pgText(code), UpdatedAt: pgTimestamp(at)})
 	return stateChange(changed, err)
 }
 
@@ -325,4 +359,17 @@ func parseUUID(value string) (pgtype.UUID, error) {
 		return pgtype.UUID{}, errors.New("invalid notification UUID")
 	}
 	return parsed, nil
+}
+
+func newClaimToken() (pgtype.UUID, error) {
+	var token pgtype.UUID
+	if _, err := rand.Read(token.Bytes[:]); err != nil {
+		return pgtype.UUID{}, err
+	}
+	// RFC 4122 version 4, variant 1 UUID; pgtype.UUID's string rendering
+	// preserves this as an opaque claim identity for SQL comparisons.
+	token.Bytes[6] = token.Bytes[6]&0x0f | 0x40
+	token.Bytes[8] = token.Bytes[8]&0x3f | 0x80
+	token.Valid = true
+	return token, nil
 }
