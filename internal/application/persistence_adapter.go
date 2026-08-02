@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
+	"math"
 	"strings"
 
 	"github.com/toozej/tabi-transit/internal/persistence"
@@ -23,7 +25,13 @@ type PersistenceCatalog struct{ Reader persistence.CatalogReader }
 type PersistenceRiderInfo struct{ Reader persistence.RiderInfoReader }
 
 func (s PersistenceRiderInfo) NearbyStops(ctx context.Context, q NearbyQuery) ([]persistence.NearbyStop, error) {
-	return s.Reader.ListNearbyStops(ctx, persistence.NearbyStopsFilter{Coordinate: q.Coordinate, RadiusMeters: int32(q.RadiusMeters), LimitPerMode: int32(q.LimitPerMode), TotalLimit: int32(q.Limit), Modes: q.Modes, WheelchairAccessible: q.WheelchairAccessible})
+	if q.RadiusMeters < math.MinInt32 || q.RadiusMeters > math.MaxInt32 ||
+		q.LimitPerMode < math.MinInt32 || q.LimitPerMode > math.MaxInt32 ||
+		q.Limit < math.MinInt32 || q.Limit > math.MaxInt32 {
+		return nil, fmt.Errorf("nearby query values exceed persistence bounds")
+	}
+	// Bounds are checked immediately above before narrowing for PostgreSQL fields.
+	return s.Reader.ListNearbyStops(ctx, persistence.NearbyStopsFilter{Coordinate: q.Coordinate, RadiusMeters: int32(q.RadiusMeters), LimitPerMode: int32(q.LimitPerMode), TotalLimit: int32(q.Limit), Modes: q.Modes, WheelchairAccessible: q.WheelchairAccessible}) // #nosec G115
 }
 func (s PersistenceRiderInfo) Stop(ctx context.Context, id string) (persistence.StopDetail, error) {
 	return s.Reader.GetStop(ctx, id)

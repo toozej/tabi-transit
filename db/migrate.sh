@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 migrations_dir="$root_dir/db/migrations"
 database_url=${TABI_DATABASE_URL:-${DATABASE_URL:-}}
 

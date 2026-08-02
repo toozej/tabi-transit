@@ -3,10 +3,12 @@ package importer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/toozej/tabi-transit/internal/sources/gtfs"
-	"time"
 )
 
 // PostgresStore uses one transaction for version creation, static rows, and
@@ -41,10 +43,11 @@ func (p PostgresStore) Import(ctx context.Context, source, label, digest string,
 	if e != nil {
 		return false, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var id int64
 	e = tx.QueryRow(ctx, `SELECT id FROM catalog.feed_versions WHERE source_id=$1 AND archive_sha256=$2`, source, digest).Scan(&id)
-	if e == nil {
+	switch {
+	case e == nil:
 		var active bool
 		e = tx.QueryRow(ctx, `SELECT status='active' FROM catalog.feed_versions WHERE id=$1`, id).Scan(&active)
 		if e != nil {
@@ -56,13 +59,13 @@ func (p PostgresStore) Import(ctx context.Context, source, label, digest string,
 		if _, e = tx.Exec(ctx, `DELETE FROM transit.stop_times WHERE feed_version_id=$1; DELETE FROM transit.trips WHERE feed_version_id=$1; DELETE FROM transit.stops WHERE feed_version_id=$1; DELETE FROM transit.routes WHERE feed_version_id=$1; DELETE FROM transit.services WHERE feed_version_id=$1`, id); e != nil {
 			return false, e
 		}
-	} else if e == pgx.ErrNoRows {
+	case errors.Is(e, pgx.ErrNoRows):
 		report, _ := json.Marshal(map[string]int{"stops": len(f.Stops), "routes": len(f.Routes), "trips": len(f.Trips), "stop_times": len(f.StopTimes)})
 		e = tx.QueryRow(ctx, `INSERT INTO catalog.feed_versions(source_id,version_label,archive_sha256,fetched_at,import_report,service_timezone) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, source, label, digest, fetched, report, feedTimezone(f)).Scan(&id)
 		if e != nil {
 			return false, e
 		}
-	} else {
+	default:
 		return false, e
 	}
 	if _, e = tx.Exec(ctx, `UPDATE catalog.feed_versions SET service_timezone=$2 WHERE id=$1`, id, feedTimezone(f)); e != nil {
@@ -143,7 +146,7 @@ func (p PostgresStore) RecordFailure(ctx context.Context, source, code string, a
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	_, e = tx.Exec(ctx, `INSERT INTO ops.source_health(source_id,last_attempt_at,last_failure_at,consecutive_failures,last_error_code) VALUES($1,$2,$2,1,$3) ON CONFLICT(source_id) DO UPDATE SET last_attempt_at=$2,last_failure_at=$2,consecutive_failures=ops.source_health.consecutive_failures+1,last_error_code=$3,updated_at=now()`, source, at, code)
 	if e != nil {
 		return e

@@ -150,7 +150,7 @@ func (s Service) Run(ctx context.Context) error {
 	if err != nil {
 		return s.failure(ctx, "fetch_failed", fetched, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return s.failure(ctx, "fetch_status", fetched, fmt.Errorf("unexpected status %d", response.StatusCode))
 	}
@@ -214,7 +214,7 @@ func (s Service) RunTripUpdates(ctx context.Context) error {
 	if err != nil {
 		return s.failure(ctx, "fetch_failed", fetched, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return s.failure(ctx, "fetch_status", fetched, fmt.Errorf("unexpected status %d", response.StatusCode))
 	}

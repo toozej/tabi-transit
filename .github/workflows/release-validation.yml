@@ -14,7 +14,7 @@ permissions:
 jobs:
   immutable-image-input:
     name: Validate release image precondition
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Check out the selected revision without credentials
@@ -22,6 +22,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Reject tags and incomplete container build artifacts
-        run: bash scripts/ci/validate-release-input.sh '${{ inputs.image_ref }}'
+        env:
+          IMAGE_REF: ${{ inputs.image_ref }}
+        run: bash scripts/ci/validate-release-input.sh "$IMAGE_REF"
       - name: Check Dockerfile syntax and policy shape
         run: docker build --check .

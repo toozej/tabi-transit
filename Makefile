@@ -1,6 +1,37 @@
+# Set sane defaults for Make.
+SHELL = bash
+.DELETE_ON_ERROR:
+MAKEFLAGS += --warn-undefined-variables
+MAKEFLAGS += --no-builtin-rules
+
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap format format-check lint typecheck test test-unit test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor
+
 GO_CACHE_DIR := $(CURDIR)/.cache/go-build
+
+# Go-based build, development, and test tools are installed independently as
+# package@version into a repository-local bin directory. Their module graphs do
+# not affect the application module or one another.
+TOOLS_DIR := $(CURDIR)/.tools
+TOOLS_BIN := $(TOOLS_DIR)/bin
+PYTHON_TOOLS_VENV := $(TOOLS_DIR)/python
+GO_TOOLS := $(CURDIR)/scripts/manage-go-tools.sh
+GO_TOOL_MANIFEST ?= $(CURDIR)/tools/go-tools.tsv
+PYTHON_TOOL_REQUIREMENTS := $(CURDIR)/tools/requirements.txt
+# Use the character code for "#" because an unescaped # starts a Make comment.
+GO_TOOL_NAMES := $(shell if test -f "$(GO_TOOL_MANIFEST)"; then awk -F '\t' 'NF && substr($$1, 1, 1) != sprintf("%c", 35) { print $$1 }' "$(GO_TOOL_MANIFEST)"; fi)
+GO_TOOL_INSTALL_TARGETS := $(addsuffix -install,$(GO_TOOL_NAMES))
+export PATH := $(TOOLS_BIN):$(PYTHON_TOOLS_VENV)/bin:$(PATH)
+export PRE_COMMIT_HOME := $(CURDIR)/.cache/pre-commit
+export SEMGREP_SETTINGS_FILE := $(CURDIR)/.cache/semgrep/settings.yml
+export XDG_CACHE_HOME := $(CURDIR)/.cache
+
+.PHONY: all clean help bootstrap format format-check lint typecheck test test-unit test-js test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-poller build doctor tools-install go-tools-install python-tools-install pre-commit-tools-install pre-commit-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
+.PHONY: $(GO_TOOL_INSTALL_TARGETS)
+
+all: pre-commit-run build ## Run repository checks and build all applications
+
+clean: ## Remove local repository tool and cache artifacts
+	@rm -rf "$(TOOLS_DIR)" "$(CURDIR)/.cache"
 
 help: ## Display available Make targets
 	@grep -E '^[a-zA-Z0-9_-]+ ?:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
@@ -20,10 +51,14 @@ lint: ## Run repository linters
 typecheck: ## Run TypeScript type checks
 	@corepack pnpm typecheck
 
-test-unit: ## Run JavaScript, mobile, and Go unit tests
+test-js: ## Run JavaScript and mobile unit tests
 	@corepack pnpm test
 	@corepack pnpm --dir apps/mobile test
+
+test-go: ## Run Go unit tests
 	@GOCACHE=$(GO_CACHE_DIR) go test ./...
+
+test-unit: test-js test-go ## Run JavaScript, mobile, and Go unit tests
 
 test: test-unit ## Run the full deterministic unit-test suite
 
@@ -62,12 +97,12 @@ test-trimet-live: ## Run one authenticated TriMet Arrivals V2 smoke test
 	@test -f .env || { echo 'test-trimet-live requires a local .env file'; exit 1; }
 	@bash -c 'set -a; . ./.env; set +a; exec env TRIMET_LIVE_SMOKE=1 TABI_TRIMET_ENABLED=true TABI_TRIMET_BASE_URL=https://developer.trimet.org go test -v ./internal/sources/trimet -run TestLiveArrivalsSmoke -count=1'
 
-generate: ## Generate OpenAPI client and sqlc code
+generate: sqlc-install ## Generate OpenAPI client and sqlc code
 	@test -f api/openapi.yaml || { echo 'OpenAPI source missing: api/openapi.yaml (WP-02)'; exit 1; }
 	@test -d packages/api-client || { echo 'API client package missing: packages/api-client (WP-02)'; exit 1; }
 	@corepack pnpm --filter @tabi/api-client generate
 	@test -f db/sqlc.yaml || { echo 'sqlc configuration missing: db/sqlc.yaml (WP-03)'; exit 1; }
-	@go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate -f db/sqlc.yaml
+	@sqlc generate -f db/sqlc.yaml
 
 generate-check: ## Verify generated API and persistence code is current
 	@before=$$(mktemp); after=$$(mktemp); trap 'rm -f "$$before" "$$after"' EXIT; \
@@ -102,3 +137,65 @@ build: ## Build JavaScript packages and Go binaries
 
 doctor: ## Check local development prerequisites
 	@scripts/doctor.sh
+
+tools-install: go-tools-install python-tools-install ## Install every pinned repository tool
+
+go-tools-install: $(GO_TOOL_INSTALL_TARGETS) ## Install every Go tool pinned in tools/go-tools.tsv
+
+$(GO_TOOL_INSTALL_TARGETS): %-install:
+	@TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) install $*
+
+python-tools-install: ## Install pinned Python-based repository tools into .tools/python
+	@mkdir -p "$(TOOLS_DIR)" "$(dir $(SEMGREP_SETTINGS_FILE))"
+	@if test ! -x "$(PYTHON_TOOLS_VENV)/bin/pre-commit" || \
+		test ! -f "$(PYTHON_TOOLS_VENV)/.requirements.txt" || \
+		! cmp -s "$(PYTHON_TOOL_REQUIREMENTS)" "$(PYTHON_TOOLS_VENV)/.requirements.txt"; then \
+		python3 -m venv "$(PYTHON_TOOLS_VENV)"; \
+		"$(PYTHON_TOOLS_VENV)/bin/python" -m pip install --disable-pip-version-check --requirement "$(PYTHON_TOOL_REQUIREMENTS)"; \
+		cp "$(PYTHON_TOOL_REQUIREMENTS)" "$(PYTHON_TOOLS_VENV)/.requirements.txt"; \
+	else \
+		echo "Skipping Python tools (pinned requirements already installed)"; \
+	fi
+
+pre-commit-tools-install: tools-install ## Install pinned tools and pre-commit hook environments
+	@mkdir -p "$(PRE_COMMIT_HOME)" "$(dir $(SEMGREP_SETTINGS_FILE))"
+	@GOWORK=off pre-commit install-hooks
+
+pre-commit-install: pre-commit-tools-install ## Install the local Git pre-commit hook
+	@$(MAKE) pre-commit-install-no-prereqs
+
+pre-commit-install-no-prereqs:
+	@GOWORK=off pre-commit install
+	@hook="$$(git rev-parse --git-path hooks/pre-commit)"; \
+	if test -f "$$hook" && ! grep -q 'tabi-tools-path' "$$hook"; then \
+		tmp="$$(mktemp)"; \
+		{ head -n 1 "$$hook"; \
+		  echo 'export PATH="$(TOOLS_BIN):$(PYTHON_TOOLS_VENV)/bin:$$PATH"  # tabi-tools-path'; \
+		  echo 'export PRE_COMMIT_HOME="$(PRE_COMMIT_HOME)"'; \
+		  echo 'export SEMGREP_SETTINGS_FILE="$(SEMGREP_SETTINGS_FILE)"'; \
+		  echo 'export XDG_CACHE_HOME="$(XDG_CACHE_HOME)"'; \
+		  tail -n +2 "$$hook"; } >"$$tmp"; \
+		cat "$$tmp" >"$$hook"; \
+		rm -f "$$tmp"; \
+		echo "Prepended repository tooling to PATH in $$hook"; \
+	fi
+
+pre-commit-run: pre-commit-tools-install bootstrap ## Run all pre-commit, vulnerability, and license checks
+	@$(MAKE) pre-commit-run-no-generate
+
+pre-commit-run-no-generate:
+	@GOWORK=off pre-commit run --all-files
+	@govulncheck ./...
+	@$(MAKE) licenses
+
+pre-commit-update: python-tools-install bootstrap ## Update pinned Go tools and hook revisions, regenerate, and verify
+	@TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+	@$(MAKE) go-tools-install
+	@GOWORK=off pre-commit autoupdate
+	@$(MAKE) generate
+	@$(MAKE) pre-commit-run-no-generate
+
+pre-commit: pre-commit-install pre-commit-run ## Install and run the repository pre-commit workflow
+
+licenses: go-licenses-install ## Report third-party Go dependency licenses
+	@go-licenses report ./...

@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 set -eu
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 out="$root/../packages/api-client/src/generated/openapi.ts"
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT

@@ -23,7 +23,7 @@ func TestParseStaticGTFSAndAfterMidnightTimes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		files[name] = f
 	}
 	readers := map[string]io.Reader{}

@@ -18,36 +18,42 @@ import (
 const migrationsDirectory = "/app/migrations"
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	if len(os.Args) != 2 || os.Args[1] != "up" {
-		fmt.Fprintln(os.Stderr, "usage: tabi-migrate up")
-		os.Exit(2)
+		_, _ = fmt.Fprintln(os.Stderr, "usage: tabi-migrate up")
+		return 2
 	}
 	databaseURL, err := secret("TABI_DATABASE_URL")
 	if err != nil || databaseURL == "" {
-		fmt.Fprintln(os.Stderr, "TABI_DATABASE_URL or TABI_DATABASE_URL_FILE is required")
-		os.Exit(2)
+		_, _ = fmt.Fprintln(os.Stderr, "TABI_DATABASE_URL or TABI_DATABASE_URL_FILE is required")
+		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "database connection configuration is invalid")
-		os.Exit(1)
+		_, _ = fmt.Fprintln(os.Stderr, "database connection configuration is invalid")
+		return 1
 	}
 	defer pool.Close()
 	if err := pool.Ping(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "database is unavailable")
-		os.Exit(1)
+		_, _ = fmt.Fprintln(os.Stderr, "database is unavailable")
+		return 1
 	}
 	if err := migrate(ctx, pool, migrationsDirectory); err != nil {
-		fmt.Fprintln(os.Stderr, "migration failed:", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(os.Stderr, "migration failed:", err)
+		return 1
 	}
+	return 0
 }
 
 func secret(name string) (string, error) {
 	if path := strings.TrimSpace(os.Getenv(name + "_FILE")); path != "" {
-		contents, err := os.ReadFile(path)
+		// The path is an explicit operator-controlled Docker secret mount.
+		contents, err := os.ReadFile(path) // #nosec G304,G703
 		if err != nil {
 			return "", err
 		}
@@ -107,7 +113,8 @@ END $$;`); err != nil {
 		if applied {
 			continue
 		}
-		contents, err := os.ReadFile(file)
+		// file comes from a glob constrained to the fixed migrations directory.
+		contents, err := os.ReadFile(file) // #nosec G304
 		if err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
 		}

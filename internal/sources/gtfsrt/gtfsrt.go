@@ -252,19 +252,6 @@ func parseMessage(raw []byte, now time.Time, maxAge, futureSkew time.Duration) (
 	}
 	return &message, updated, nil
 }
-func epochPtr(value *uint64, now time.Time, futureSkew time.Duration) *time.Time {
-	if value == nil {
-		return nil
-	}
-	result, ok := epochUint64(*value)
-	if !ok {
-		return nil
-	}
-	if result.After(now.Add(futureSkew)) {
-		return nil
-	}
-	return &result
-}
 func epochInt64Ptr(value *int64, now time.Time, futureSkew time.Duration) *time.Time {
 	if value == nil {
 		return nil

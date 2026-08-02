@@ -17,7 +17,7 @@ func main() {
 
 func run(runtime notificationworker.RuntimeConfig, err error, stderr io.Writer) int {
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 2
 	}
 	if !runtime.Enabled {
@@ -26,6 +26,6 @@ func run(runtime notificationworker.RuntimeConfig, err error, stderr io.Writer) 
 	// D-017 and D-018 deliberately prevent construction of a provider client,
 	// database store, or network loop. A true flag without that approved
 	// composition fails closed instead of silently sending anything.
-	fmt.Fprintln(stderr, "notification delivery cannot start until approved provider composition is added")
+	_, _ = fmt.Fprintln(stderr, "notification delivery cannot start until approved provider composition is added")
 	return 2
 }

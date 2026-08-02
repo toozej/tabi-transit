@@ -412,9 +412,9 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, target 
 		}
 		return Freshness{}, &Error{Kind: ErrorUnavailable, Err: errors.New("request failed")}
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 		return Freshness{}, &Error{Kind: ErrorUnavailable, StatusCode: response.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))

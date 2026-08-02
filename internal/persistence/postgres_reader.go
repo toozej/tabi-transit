@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -64,7 +65,7 @@ func (r *PostgresReader) ListCurrentVehicles(ctx context.Context, filter Vehicle
 }
 
 func (r *PostgresReader) ListVehicleHistory(ctx context.Context, filter VehicleHistoryFilter) ([]VehicleObservation, error) {
-	if filter.VehicleID == "" || filter.From.IsZero() || filter.To.IsZero() || filter.Limit < 1 {
+	if filter.VehicleID == "" || filter.From.IsZero() || filter.To.IsZero() || filter.Limit < 1 || filter.Limit > math.MaxInt32 {
 		return nil, errors.New("invalid vehicle history filter")
 	}
 	rows, err := r.queries.ListVehicleHistory(ctx, sqlcgen.ListVehicleHistoryParams{
@@ -251,9 +252,10 @@ func (r *PostgresReader) ListStopArrivals(ctx context.Context, filter ArrivalFil
 				if relationship == "" {
 					relationship = strings.ToUpper(text(row.TripRelationship))
 				}
-				if relationship == "CANCELED" {
+				switch relationship {
+				case "CANCELED":
 					status = "cancelled"
-				} else if relationship == "SKIPPED" {
+				case "SKIPPED":
 					status = "skipped"
 				}
 				estimated := timestampPtr(row.ArrivalTime)
@@ -360,10 +362,11 @@ func alertModel(source, id string, cause, effect *string, header, description, u
 
 func catalogStop(id, name, mode string, longitude, latitude float64, routeIDs []string, parent *string, wheelchair int16) CatalogStop {
 	stop := CatalogStop{ID: id, Name: name, Coordinate: Coordinate{Longitude: longitude, Latitude: latitude}, Modes: []string{mode}, RouteIDs: routeIDs, ParentStopID: parent}
-	if wheelchair == 1 {
+	switch wheelchair {
+	case 1:
 		value := true
 		stop.WheelchairAccessible = &value
-	} else if wheelchair == 2 {
+	case 2:
 		value := false
 		stop.WheelchairAccessible = &value
 	}
@@ -373,7 +376,8 @@ func int2(value *int) pgtype.Int2 {
 	if value == nil {
 		return pgtype.Int2{}
 	}
-	return pgtype.Int2{Int16: int16(*value), Valid: true}
+	// API parsing restricts direction IDs to the GTFS values 0 and 1.
+	return pgtype.Int2{Int16: int16(*value), Valid: true} // #nosec G115
 }
 func int2Ptr(value pgtype.Int2) *int {
 	if !value.Valid {

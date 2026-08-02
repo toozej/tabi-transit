@@ -158,7 +158,10 @@ func csvRows(f *zip.File, policy ArchivePolicy) ([]map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
+	if f.UncompressedSize64 >= math.MaxInt64 {
+		return nil, fmt.Errorf("%w: %s declared size is too large", ErrInvalidFeed, f.Name)
+	}
 	r := csv.NewReader(io.LimitReader(rc, int64(f.UncompressedSize64)+1))
 	r.FieldsPerRecord = -1
 	header, err := r.Read()

@@ -596,7 +596,7 @@ func validRequestID(id string) bool {
 		return false
 	}
 	for _, r := range id {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-", r)) {
+		if !safeTokenRune(r, "._-") {
 			return false
 		}
 	}
@@ -1141,9 +1141,12 @@ func parseModes(v string) ([]string, error) {
 	return out, nil
 }
 func hasControl(v string) bool { return strings.ContainsAny(v, "\r\n\t") }
+func safeTokenRune(r rune, extra string) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(extra, r)
+}
 func validSearch(v string) bool {
 	for _, r := range v {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(":_-", r)) {
+		if !safeTokenRune(r, ":_-") {
 			return false
 		}
 	}

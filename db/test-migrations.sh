@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 image=${POSTGIS_TEST_IMAGE:-postgis/postgis:17-3.5}
 container_name="tabi-postgis-wp03-$$"
-port=${POSTGIS_TEST_PORT:-55432}
 
 cleanup() { docker rm -f "$container_name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT

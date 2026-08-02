@@ -11,3 +11,25 @@ Phase 0 is in progress. The repository foundation, API contract, mobile compatib
 ## Safety and source policy
 
 Tabi uses official sources through backend adapters. Portland Streetcar coverage and Rose City Transit-inspired presentation use TriMet's official feeds and Arrivals V2 interface; Tabi has no direct Streetcar/PBOT/UmoIQ or Rose City integration. Never add provider credentials, production tokens, or `.env` files to Git.
+
+## Repository tooling
+
+Install the locked JavaScript dependencies with `make bootstrap`. Go-based build,
+development, and test tools are version-pinned in `tools/go-tools.tsv` and
+installed independently into the ignored `.tools/bin` directory; Python-based
+tooling is pinned in `tools/requirements.txt` and installed into
+`.tools/python`. These isolated tool environments do not modify the application
+Go module or the system Python installation.
+
+Run `make pre-commit` to install the local Git hook and execute the complete
+repository check suite. Later runs can use `make pre-commit-run`, while
+`make pre-commit-install` only installs the hook and its pinned dependencies.
+
+Run `make pre-commit-update` to update pinned Go tools and pre-commit hook
+revisions, regenerate checked-in clients, and validate the resulting toolchain.
+A scheduled GitHub Actions workflow runs the same target and opens an auto-merge
+PR when updates are available. The workflow expects repository secrets named
+`AUTOUPDATE_APP_ID` and `AUTOUPDATE_APP_PRIVATE_KEY`, matching the updater GitHub
+App used by `toozej/monogo`, so CI is triggered for its pull requests. Dependabot
+keeps application, JavaScript, Python-tool, Actions, and container dependencies
+current.

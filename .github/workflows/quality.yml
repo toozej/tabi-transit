@@ -14,44 +14,46 @@ concurrency:
 
 jobs:
   repository-quality:
-    name: Format, static checks, unit tests, and contract drift
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    name: Pre-commit, static checks, tests, and contract drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check out the untrusted revision without credentials
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.1.0
         with:
           node-version: 20.19.0
           cache: pnpm
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           check-latest: false
+      - name: Cache pinned repository tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .tools
+            .cache/pre-commit
+          key:
+            ${{ runner.os }}-${{ runner.arch }}-repository-tools-${{ hashFiles('Makefile',
+            '.pre-commit-config.yaml', 'tools/go-tools.tsv', 'tools/requirements.txt', 'scripts/manage-go-tools.sh')
+            }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-repository-tools-
       - name: Install locked JavaScript dependencies
         run: |
           corepack enable
           corepack pnpm install --frozen-lockfile
-      - name: Validate CI workflow syntax
-        run: bash scripts/ci/validate-workflows.sh
-      - name: Validate CI workflow expressions
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/*.yml
-      - name: Format, lint, and strict TypeScript checks
-        run: make format-check lint typecheck
-      - name: Unit and race tests
-        run: make test test-race
-      - name: OpenAPI and sqlc generated-code drift
-        run: make generate-check
-      - name: Secret, privacy, and repository policy checks
-        run: bash scripts/quality-security-check.sh
+      - name: Run repository pre-commit workflow
+        run: make pre-commit-run
 
   compose-and-fixtures:
     name: Compose topology and deterministic fixture integration
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out the untrusted revision without credentials
@@ -59,12 +61,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.1.0
         with:
           node-version: 20.19.0
           cache: pnpm
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           check-latest: false

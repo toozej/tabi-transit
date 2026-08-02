@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/toozej/tabi-transit/internal/sources/gtfs"
 	"io"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/toozej/tabi-transit/internal/sources/gtfs"
 )
 
 type memoryStore struct {

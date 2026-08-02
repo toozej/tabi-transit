@@ -1,0 +1,86 @@
+---
+name: Tool and pre-commit autoupdate
+
+on:
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  autoupdate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # Mint a GitHub App installation token. The PR is created with THIS token
+      # (not the default GITHUB_TOKEN) on purpose: PRs/pushes made with
+      # GITHUB_TOKEN do not trigger other workflows, so CI would never run on the
+      # bot PR. An App token does trigger CI, which is what gates auto-merge.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.AUTOUPDATE_APP_ID }}
+          private-key: ${{ secrets.AUTOUPDATE_APP_PRIVATE_KEY }}
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.1.0
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Update pinned Go tools and pre-commit hooks
+        run: make pre-commit-update
+
+      - name: Ensure dependencies label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create dependencies \
+            --color "0366d6" \
+            --description "Pull requests that update a dependency" \
+            --force
+
+      - name: Create pull request
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          commit-message: "chore(tools): autoupdate"
+          title: "chore(tools): autoupdate"
+          body: |
+            Automated pinned Go tool and pre-commit hook refresh.
+
+            `make pre-commit-update` upgraded `tools/go-tools.tsv` and hook
+            revisions, installed those exact versions, regenerated checked-in
+            clients, and validated the result before this PR was opened. Full CI
+            runs again on this PR and gates auto-merge.
+          branch: chore/tools-autoupdate
+          delete-branch: true
+          labels: dependencies
+
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh pr merge --squash --auto "${{ steps.cpr.outputs.pull-request-number }}"

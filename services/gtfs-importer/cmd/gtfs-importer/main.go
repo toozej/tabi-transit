@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	importer "github.com/toozej/tabi-transit/services/gtfs-importer"
 	"os"
 	"time"
+
+	importer "github.com/toozej/tabi-transit/services/gtfs-importer"
 )
 
 func main() {
 	s := newService(os.Getenv)
 	if err := s.Run(context.Background()); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

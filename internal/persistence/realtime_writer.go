@@ -34,7 +34,7 @@ func (w PostgresRealtimeWriter) ReplaceVehicleSnapshot(ctx context.Context, snap
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := lockAndCheckSnapshot(ctx, tx, snapshot.SourceID, snapshot.SourceUpdatedAt); err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (w PostgresRealtimeWriter) ReplaceTripUpdateSnapshot(ctx context.Context, s
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := lockAndCheckSnapshot(ctx, tx, snapshot.SourceID, snapshot.SourceUpdatedAt); err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func (w PostgresRealtimeWriter) RecordSourceFailure(ctx context.Context, sourceI
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `DELETE FROM history.vehicle_observations WHERE processed_at < now() - $1::interval`, vehicleHistoryRetention.String()); err != nil {
 		return fmt.Errorf("prune vehicle history: %w", err)
 	}

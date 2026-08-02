@@ -251,14 +251,14 @@ func mapRoute(v routeResponse) Route {
 		return Route{}
 	}
 	x := v.ResultSet.Route[0]
-	return Route{ID: x.ID, ShortName: x.ShortName, LongName: x.LongName}
+	return Route(x)
 }
 func mapStop(v stopResponse) Stop {
 	if len(v.ResultSet.Location) == 0 {
 		return Stop{}
 	}
 	x := v.ResultSet.Location[0]
-	return Stop{ID: x.ID, Name: x.Name, Longitude: x.Longitude, Latitude: x.Latitude}
+	return Stop(x)
 }
 func mapVehicle(v vehicleResponse) Vehicle {
 	if len(v.ResultSet.Vehicle) == 0 {
@@ -272,14 +272,14 @@ func mapTrip(v tripResponse) Trip {
 		return Trip{}
 	}
 	x := v.ResultSet.Trip[0]
-	return Trip{ID: x.ID, RouteID: x.RouteID, BlockID: x.BlockID}
+	return Trip(x)
 }
 func mapBlock(v blockResponse) Block {
 	if len(v.ResultSet.Block) == 0 {
 		return Block{}
 	}
 	x := v.ResultSet.Block[0]
-	return Block{ID: x.ID, TripIDs: x.TripIDs}
+	return Block(x)
 }
 func mapPlan(v planResponse) Plan {
 	output := Plan{ID: v.ResultSet.PlanID, Itineraries: make([]Itinerary, 0, len(v.ResultSet.Itineraries))}

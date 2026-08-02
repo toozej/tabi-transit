@@ -7,13 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/toozej/tabi-transit/internal/sources/gtfs"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/toozej/tabi-transit/internal/sources/gtfs"
 )
 
 var ErrDisabled = errors.New("GTFS source endpoint is not configured")
@@ -102,7 +103,7 @@ func (s Service) Run(ctx context.Context) error {
 	if e != nil {
 		return s.fail(ctx, "fetch_failed", now, e)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return s.fail(ctx, "fetch_status", now, fmt.Errorf("unexpected status %d", resp.StatusCode))
 	}

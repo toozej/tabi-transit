@@ -3,6 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/toozej/tabi-transit/internal/api"
 	"github.com/toozej/tabi-transit/internal/application"
@@ -10,19 +17,17 @@ import (
 	"github.com/toozej/tabi-transit/internal/persistence"
 	"github.com/toozej/tabi-transit/internal/persistence/sqlcgen"
 	"github.com/toozej/tabi-transit/internal/sources/trimet"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	c, err := config.Load()
 	if err != nil {
 		slog.Error("invalid configuration", "error", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	service := application.Service{}
 	var reader *persistence.PostgresReader
@@ -39,7 +44,7 @@ func main() {
 				pool.Close()
 			}
 			slog.Error("database is unavailable", "error", err.Error())
-			os.Exit(1)
+			return 1
 		}
 		defer pool.Close()
 		reader = persistence.NewPostgresReader(sqlcgen.New(pool))
@@ -53,13 +58,13 @@ func main() {
 	trimetConfig, err := trimet.LoadConfig(os.Getenv, os.ReadFile)
 	if err != nil {
 		slog.Error("invalid TriMet configuration", "error", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	if trimetConfig.PlannerEnabled {
 		client, clientErr := trimet.NewClient(trimetConfig, nil, nil)
 		if clientErr != nil {
 			slog.Error("invalid TriMet planner configuration", "error", clientErr.Error())
-			os.Exit(1)
+			return 1
 		}
 		service.Planning.Planner = application.NewTriMetPlanner(client)
 	}
@@ -81,18 +86,19 @@ func main() {
 	select {
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
-			return
+			return 0
 		}
 		slog.Error("API stopped", "error", err.Error())
-		os.Exit(1)
+		return 1
 	case <-shutdown.Done():
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			slog.Error("API shutdown failed", "error", err.Error())
-			os.Exit(1)
+			return 1
 		}
 	}
+	return 0
 }
 
 func newServer(c config.Config, service application.Service, options ...api.Option) *http.Server {

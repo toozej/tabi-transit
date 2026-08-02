@@ -1,0 +1,74 @@
+---
+version: 2
+multi-ecosystem-groups:
+  combined:
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      include: scope
+
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - /
+      - /spikes/transit-data
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined
+
+  - package-ecosystem: pip
+    directory: /tools
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined
+
+  - package-ecosystem: docker-compose
+    directory: /deployment
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined

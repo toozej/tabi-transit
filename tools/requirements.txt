@@ -1,0 +1,3 @@
+# Python-based repository tooling. Dependabot maintains these pins.
+pre-commit==4.3.0
+shellcheck-py==0.11.0.1

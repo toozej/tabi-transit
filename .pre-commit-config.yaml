@@ -1,0 +1,146 @@
+---
+default_language_version: { python: python3 }
+minimum_pre_commit_version: "4.0"
+
+repos:
+  - repo: local
+    hooks:
+      - id: repository-format-check
+        name: Check JavaScript, TypeScript, JSON, Markdown, and YAML formatting
+        entry: make format-check
+        language: system
+        pass_filenames: false
+        files: '\.(js|jsx|mjs|ts|tsx|json|md|yaml|yml)$'
+      - id: repository-eslint
+        name: Run ESLint
+        entry: make lint
+        language: system
+        pass_filenames: false
+        files: '\.(js|jsx|mjs|ts|tsx)$'
+      - id: repository-typecheck
+        name: Run TypeScript type checks
+        entry: make typecheck
+        language: system
+        pass_filenames: false
+        files: '\.(ts|tsx)$'
+      - id: repository-javascript-tests
+        name: Run JavaScript and mobile unit tests
+        entry: make test-js
+        language: system
+        pass_filenames: false
+        files: '\.(js|jsx|mjs|ts|tsx)$'
+      - id: generated-code-check
+        name: Check generated OpenAPI and sqlc code
+        entry: make generate-check
+        language: system
+        pass_filenames: false
+        files: "^(api/|db/|packages/api-client/|internal/persistence/)"
+      - id: workflow-policy-check
+        name: Validate GitHub Actions workflow structure
+        entry: scripts/ci/validate-workflows.sh
+        language: system
+        pass_filenames: false
+        files: '^\.github/workflows/.*\.ya?ml$'
+      - id: repository-security-policy
+        name: Check repository secret, privacy, and deployment policy
+        entry: scripts/quality-security-check.sh
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        name: Check for valid YAML syntax in repo
+        args: [--allow-multiple-documents]
+      - id: detect-private-key
+        name: Check for private keys in repo
+      - id: trailing-whitespace
+        name: Remove trailing whitespace in YAML and shell files
+        files: '\.(sh|yaml|yml)$'
+      - id: end-of-file-fixer
+        name: Ensure files end with one newline
+        files: '\.(sh|yaml|yml)$'
+      - id: mixed-line-ending
+        name: Ensure line endings are consistent
+        files: '\.(sh|yaml|yml)$'
+      - id: check-executables-have-shebangs
+        files: '\.(rb|sh)$'
+      - id: check-shebang-scripts-are-executable
+        files: '\.(rb|sh)$'
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.4
+    hooks:
+      - id: go-sec-mod
+        args:
+          [
+            -exclude-generated,
+            -exclude-dir=.cache,
+            -exclude-dir=.tools,
+            -exclude-dir=node_modules,
+          ]
+      - id: go-staticcheck-mod
+      - id: go-critic
+      - id: go-fmt
+      - id: go-imports
+      - id: golangci-lint-mod
+      - id: go-test-mod
+        args: [-race]
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint-docker
+        args:
+          [
+            --ignore,
+            DL3007,
+            --ignore,
+            DL3008,
+            --ignore,
+            DL3013,
+            --ignore,
+            DL3062,
+          ]
+        files: "(^|/)Dockerfile$"
+
+  - repo: https://github.com/checkmake/checkmake/
+    rev: v0.3.0
+    hooks:
+      - id: checkmake
+        files: "(^|/)Makefile$"
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/semgrep/pre-commit
+    rev: "v1.170.0"
+    hooks:
+      - id: semgrep
+        args:
+          - --config
+          - auto
+          - --error
+          - --skip-unknown-extensions
+          - --quiet
+          - --exclude-rule
+          - go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter
+          - --exclude-rule
+          - package_managers.pnpm.pnpm-block-exotic-sub-dependencies.pnpm-block-exotic-sub-dependencies
+          - --exclude-rule
+          - package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age
+          - --exclude-rule
+          - package_managers.pnpm.pnpm-trust-policy.pnpm-trust-policy
+        exclude: "(^|/)(docs/implementation-plan|examples?|fixtures?|e2e|testdata)/"
+
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes

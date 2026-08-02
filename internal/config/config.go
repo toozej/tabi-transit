@@ -73,7 +73,8 @@ func Load() (Config, error) {
 // explicitly request a secret receive its value.
 func Secret(name string) (string, error) {
 	if path := strings.TrimSpace(os.Getenv(name + "_FILE")); path != "" {
-		b, err := os.ReadFile(path)
+		// The path is an explicit operator-controlled Docker/Kubernetes secret mount.
+		b, err := os.ReadFile(path) // #nosec G304,G703
 		if err != nil {
 			return "", fmt.Errorf("%s_FILE: %w", name, err)
 		}

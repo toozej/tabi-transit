@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/toozej/tabi-transit/internal/api"
-	"github.com/toozej/tabi-transit/internal/application"
-	"github.com/toozej/tabi-transit/internal/config"
-	"github.com/toozej/tabi-transit/internal/persistence"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/toozej/tabi-transit/internal/api"
+	"github.com/toozej/tabi-transit/internal/application"
+	"github.com/toozej/tabi-transit/internal/config"
+	"github.com/toozej/tabi-transit/internal/persistence"
 )
 
 type fakeVehicles struct {
@@ -192,11 +193,15 @@ func validRequestIDForTest(id string) bool {
 		return false
 	}
 	for _, r := range id {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-", r)) {
+		if !validRequestIDRuneForTest(r) {
 			return false
 		}
 	}
 	return true
+}
+
+func validRequestIDRuneForTest(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._-", r)
 }
 
 func TestVehicleHistoryIsBoundedAndPaginated(t *testing.T) {
@@ -277,7 +282,10 @@ func TestUnavailableAndRateLimit(t *testing.T) {
 		t.Fatalf("unavailable %d %#v", w.Code, w.Header())
 	}
 	h = api.New(application.Service{Catalog: fakeCatalog{}, Vehicles: fakeVehicles{}}, config.Config{RateLimit: config.RateLimit{Requests: 2, Window: time.Hour}})
-	if request(h, "/health/live").Code != 200 || request(h, "/health/live").Code != 200 || request(h, "/health/live").Code != 429 {
+	first := request(h, "/health/live").Code
+	second := request(h, "/health/live").Code
+	third := request(h, "/health/live").Code
+	if first != http.StatusOK || second != http.StatusOK || third != http.StatusTooManyRequests {
 		t.Fatal("rate limit did not apply")
 	}
 }
