@@ -45,7 +45,7 @@ Use pnpm workspaces, Go modules/`go.work`, `sqlc`, OpenAPI, a pinned Go OpenAPI 
 ## Stable root commands
 
 ```text
-make bootstrap format lint typecheck test test-unit test-integration
+make prereqs format lint typecheck test test-unit test-integration
 make test-e2e test-race test-load generate generate-check
 make db-up db-migrate dev-api dev-mobile dev-poller build doctor
 ```

@@ -48,7 +48,7 @@ fi
 if corepack pnpm --version >/dev/null 2>&1; then
   printf 'ok: pnpm %s\n' "$(corepack pnpm --version)"
 else
-  printf 'missing: pnpm via Corepack; run make bootstrap with network access\n' >&2
+  printf 'missing: pnpm via Corepack; run make prereqs with network access\n' >&2
   failures=$((failures + 1))
 fi
 

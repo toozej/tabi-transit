@@ -14,7 +14,7 @@ Tabi uses official sources through backend adapters. Portland Streetcar coverage
 
 ## Repository tooling
 
-Install the locked JavaScript dependencies with `make bootstrap`. Go-based build,
+Install tooling and locked dependencies with `make prereqs`. Go-based build,
 development, and test tools are version-pinned in `tools/go-tools.tsv` and
 installed independently into the ignored `.tools/bin` directory; Python-based
 tooling is pinned in `tools/requirements.txt` and installed into

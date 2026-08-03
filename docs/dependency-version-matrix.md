@@ -7,6 +7,8 @@ The table records selection criteria, not unverified current versions. A version
 | Node.js                              | Proposed | Supported LTS; compatible with Expo and pnpm                  | `.nvmrc` or `package.json` engines | `make doctor`, workspace install         |
 | pnpm                                 | Proposed | Compatible with selected Node/workspaces                      | `packageManager`                   | frozen-lockfile install                  |
 | Expo SDK / React Native              | Proposed | Supported stable pairing for development builds               | mobile `package.json`, lockfile    | iOS/Android development build            |
+| Xcode / iOS Simulator                | Proposed | Latest Xcode supported by Sequoia; Intel-compatible runtimes  | `.xcode-version`, simulator config | Both configured simulator targets        |
+| Android Studio / Emulator            | Proposed | Stable Studio; Intel x86_64 API 31, 36, and 37 images         | Brewfile, emulator config          | All three configured emulator targets    |
 | `@rnmapbox/maps` / native Mapbox SDK | Proposed | Compatible with selected Expo/RN; maintained security posture | mobile manifest/lockfile           | ShapeSource build/device proof           |
 | TypeScript / Vitest / RNTL           | Proposed | Strict TS and a proven RN-compatible test harness             | workspace manifests/lockfile       | typecheck and representative test        |
 | Go                                   | Proposed | Current supported stable compatible with generators           | `go.mod`, `go.work`                | unit/race tests                          |

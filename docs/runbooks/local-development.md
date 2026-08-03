@@ -11,10 +11,10 @@ architecture/version-matrix work package; do not infer them from this runbook.
 Run `make doctor` first. It exits non-zero if a required local prerequisite is
 unavailable; it does not claim success for optional tools it cannot verify.
 
-## Bootstrap and routine checks
+## Prerequisites and routine checks
 
 ```sh
-make bootstrap
+make prereqs
 make format-check lint typecheck test
 ```
 
@@ -49,6 +49,11 @@ Mobile uses Expo development builds, not Expo Go. After WP-08 adds the app and
 native setup, use `make dev-mobile`. Physical iOS/Android validation and Maestro
 require an available simulator/emulator or physical device; a build-time check is
 not evidence that Mapbox native rendering works on a device.
+
+On the configured Intel macOS host, `make prereqs` installs the iOS and Android
+development components. Use `make ios-simulators` and `make android-simulators`
+to create the configured virtual devices; device-specific launch targets are
+listed by `make help` and documented in `apps/mobile/README.md`.
 
 ## Service and database checks
 

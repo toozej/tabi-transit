@@ -1,0 +1,23 @@
+{
+  "host": {
+    "macOS": "Sequoia 15.6 or later",
+    "xcode": "26.3",
+    "runtimeArchitecture": "universal"
+  },
+  "targets": [
+    {
+      "id": "iphone-13-mini-ios-18",
+      "name": "Tabi iPhone 13 mini",
+      "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-13-mini",
+      "runtimeMajor": 18,
+      "recommendedRuntime": "18.5"
+    },
+    {
+      "id": "iphone-air-ios-26",
+      "name": "Tabi iPhone Air",
+      "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Air",
+      "runtimeMajor": 26,
+      "recommendedRuntime": "26.2"
+    }
+  ]
+}

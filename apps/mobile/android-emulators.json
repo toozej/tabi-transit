@@ -1,0 +1,71 @@
+{
+  "host": {
+    "macOS": "Sequoia 15.6 or later",
+    "architecture": "x86_64",
+    "systemImageAbi": "x86_64"
+  },
+  "sdkPackages": [
+    "cmdline-tools;latest",
+    "platform-tools",
+    "emulator",
+    "platforms;android-31",
+    "platforms;android-35",
+    "platforms;android-36",
+    "platforms;android-37",
+    "build-tools;35.0.0",
+    "build-tools;37.0.0"
+  ],
+  "targets": [
+    {
+      "id": "motorola-razr-2024-android-16",
+      "avdName": "Tabi_Motorola_Razr_2024_API_36",
+      "displayName": "Motorola Razr 2024",
+      "androidVersion": 16,
+      "apiLevel": 36,
+      "systemImage": "system-images;android-36;google_apis;x86_64",
+      "deviceCandidates": ["7.6in Foldable", "foldable", "pixel_7_pro"],
+      "hardware": {
+        "hw.device.manufacturer": "Motorola",
+        "hw.device.name": "motorola_razr_2024",
+        "hw.lcd.width": "1080",
+        "hw.lcd.height": "2640",
+        "hw.lcd.density": "413",
+        "hw.ramSize": "4096"
+      }
+    },
+    {
+      "id": "pixel-10-pro-android-17",
+      "avdName": "Tabi_Pixel_10_Pro_API_37",
+      "displayName": "Google Pixel 10 Pro",
+      "androidVersion": 17,
+      "apiLevel": 37,
+      "systemImage": "system-images;android-37;google_apis;x86_64",
+      "deviceCandidates": ["pixel_10_pro", "Pixel 10 Pro", "pixel_9_pro"],
+      "hardware": {
+        "hw.device.manufacturer": "Google",
+        "hw.device.name": "pixel_10_pro",
+        "hw.lcd.width": "1280",
+        "hw.lcd.height": "2856",
+        "hw.lcd.density": "495",
+        "hw.ramSize": "4096"
+      }
+    },
+    {
+      "id": "sony-xperia-1-ii-android-12",
+      "avdName": "Tabi_Sony_Xperia_1_II_API_31",
+      "displayName": "Sony Xperia 1 II",
+      "androidVersion": 12,
+      "apiLevel": 31,
+      "systemImage": "system-images;android-31;google_apis;x86_64",
+      "deviceCandidates": ["pixel_7_pro", "Pixel 7 Pro", "pixel"],
+      "hardware": {
+        "hw.device.manufacturer": "Sony",
+        "hw.device.name": "sony_xperia_1_ii",
+        "hw.lcd.width": "1644",
+        "hw.lcd.height": "3840",
+        "hw.lcd.density": "643",
+        "hw.ramSize": "4096"
+      }
+    }
+  ]
+}
