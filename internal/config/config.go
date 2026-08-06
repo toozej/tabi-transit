@@ -25,6 +25,9 @@ type PublicAPI struct {
 	StaleThresholdSeconds int
 	StaticFeedVersion     string
 	StaticFeedPublishedAt time.Time
+	// AllowedWebOrigins is an explicit development CORS allowlist. Production
+	// web requests use the same public origin and therefore do not need CORS.
+	AllowedWebOrigins []string
 }
 
 type RateLimit struct {
@@ -40,7 +43,7 @@ func Load() (Config, error) {
 	c := Config{ListenAddress: listenAddress, API: PublicAPI{
 		Version: value("TABI_API_VERSION", "0.1.0"), MinimumAppVersion: value("TABI_MINIMUM_APP_VERSION", "0.1.0"),
 		StaleThresholdSeconds: 90, StaticFeedVersion: value("TABI_STATIC_FEED_VERSION", "unknown"),
-		StaticFeedPublishedAt: time.Unix(0, 0).UTC(),
+		StaticFeedPublishedAt: time.Unix(0, 0).UTC(), AllowedWebOrigins: allowedOrigins(value("TABI_WEB_ALLOWED_ORIGINS", "")),
 	}, RateLimit: RateLimit{Requests: 120, Window: time.Minute}}
 	var err error
 	if c.API.StaleThresholdSeconds, err = positiveInt("TABI_STALE_THRESHOLD_SECONDS", c.API.StaleThresholdSeconds); err != nil {
@@ -67,6 +70,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	return c, nil
+}
+
+func allowedOrigins(raw string) []string {
+	var origins []string
+	for _, origin := range strings.Split(raw, ",") {
+		origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+		if origin == "" || origin == "*" || (!strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://")) {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins
 }
 
 // Secret reads support the conventional NAME_FILE override. Only callers that

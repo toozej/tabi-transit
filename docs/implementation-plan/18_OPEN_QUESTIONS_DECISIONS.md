@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-018
 title: "Open Questions, Decision Gates and Risks"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["technical-lead", "product-owner", "legal-coordinator"]
 depends_on: ["TAB-PLAN-001", "TAB-PLAN-002"]
 ---
@@ -15,7 +15,13 @@ Do not stall unrelated work. Apply the default while collecting evidence.
 ## External decisions
 
 - **D-001 TriMet:** AppID, terms, rate, cache/retention/attribution, beta expectations. Default backend-only conservative official-source use.
-- **D-004 Mapbox:** Search Box vs Geocoding, storage, scopes, telemetry/attribution, offline/cache, budget. Default no unapproved persistent geocoder storage.
+- **D-004 Mapbox Search/Geocoding:** Search Box vs Geocoding, storage,
+  scopes, telemetry/attribution, offline/cache, and budget. Default no
+  unapproved persistent geocoder storage or provider search calls.
+- **D-020 browser Mapbox rendering:** Configure a restricted public browser
+  Maps SDK token, origin restrictions, approved style/attribution and
+  telemetry treatment, budget alerts, and browser accessibility evidence.
+  The web adapter may remain capability-disabled until this evidence exists.
 
 ## Architecture decisions
 
@@ -23,6 +29,7 @@ Do not stall unrelated work. Apply the default while collecting evidence.
 - **D-011** Vitest/RNTL harness: prove; no silent Jest suite; move native assertions to Maestro under ADR if needed.
 - **D-012** Vehicle hot-path JSON vs GeoJSON: benchmark; freeze contract after.
 - **D-013** Mobile static sync SQLite artifact vs JSON: profile; default JSON vertical slice.
+- **D-019** Responsive web: supported-browser/device matrix, public origin, Vite/static-hosting topology, browser offline/PWA scope, analytics consent, and browser-push lifecycle. Default responsive SPA with no PWA or browser push claim.
 - **D-014** Poller: separate task sharing packages/DB.
 - **D-015** Push: Expo Push Service first, abstraction retained.
 - **D-016** Linux hosting: select an affordable VPS/provider, supported distribution, server size, backup target, DNS, and SSH/VPN policy. Canonical runtime remains Docker Compose.

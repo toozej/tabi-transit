@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-000
 title: "Tabi Implementation Plan — Agent Entry Point"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["technical-lead", "program-manager", "all-agents"]
 depends_on: []
 ---
@@ -10,11 +10,12 @@ depends_on: []
 
 # Tabi Implementation Plan
 
-This directory is the implementation source of truth for **Tabi**, a modern Portland-area transit application for iOS and Android.
+This directory is the implementation source of truth for **Tabi**, a modern Portland-area transit application for responsive web browsers and iOS/Android native apps.
 
 ## Selected stack
 
 - React Native with Expo development builds and TypeScript.
+- React with Vite and TypeScript for the responsive web application.
 - Expo Router, TanStack Query, Zustand, Zod, React Hook Form, Expo SQLite, SecureStore, Location, Notifications, and Background Task.
 - `@rnmapbox/maps`, the community React Native wrapper over Mapbox native Maps SDKs.
 - Go services using `net/http`, Chi, `pgx`, `sqlc`, PostgreSQL, and PostGIS.
@@ -63,6 +64,7 @@ The canonical production deployment is a single Linux Docker host. Files under `
 | `19_REFERENCE_SOURCES.md` | Authoritative documentation |
 | `20_LINUX_DOCKER_COMPOSE_RUNBOOK.md` | Concrete installation, deployment, backup and recovery runbook |
 | `21_FLY_IO_OPTIONAL_DEPLOYMENT.md` | Optional Fly.io deployment using the same images |
+| `22_WEB_APPLICATION_PLAN.md` | Responsive browser application, shared-client boundaries, and release gates |
 
 ## Precedence
 

@@ -1,0 +1,195 @@
+@import "@tabi/design-tokens/web.css";
+
+* {
+  box-sizing: border-box;
+}
+html {
+  background: var(--tabi-color-canvas);
+  color: var(--tabi-color-text);
+  font-family: var(--tabi-font-family-sans);
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  font-size: var(--tabi-font-size-body);
+  line-height: var(--tabi-line-height-normal);
+}
+a {
+  color: var(--tabi-color-info);
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--tabi-color-focus);
+  outline-offset: 3px;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  border: 1px solid var(--tabi-color-brand);
+  border-radius: var(--tabi-radius-small);
+  background: var(--tabi-color-brand);
+  color: var(--tabi-color-brand-on);
+  cursor: pointer;
+  padding: var(--tabi-space-2) var(--tabi-space-3);
+}
+input {
+  border: 1px solid var(--tabi-color-border);
+  border-radius: var(--tabi-radius-small);
+  display: block;
+  min-height: 44px;
+  padding: var(--tabi-space-2);
+  width: 100%;
+}
+.skip-link {
+  background: var(--tabi-color-text);
+  color: var(--tabi-color-brand-on);
+  left: var(--tabi-space-2);
+  padding: var(--tabi-space-2);
+  position: fixed;
+  top: -100px;
+  z-index: 10;
+}
+.skip-link:focus {
+  top: var(--tabi-space-2);
+}
+.topbar {
+  align-items: center;
+  background: var(--tabi-color-surface);
+  border-bottom: 1px solid var(--tabi-color-border);
+  display: flex;
+  gap: var(--tabi-space-3);
+  min-height: 56px;
+  padding: var(--tabi-space-2) var(--tabi-space-3);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.topbar nav {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+}
+.brand {
+  color: var(--tabi-color-brand);
+  font-size: var(--tabi-font-size-title);
+  font-weight: var(--tabi-font-weight-bold);
+  text-decoration: none;
+}
+.sidebar {
+  display: none;
+}
+main {
+  min-width: 0;
+}
+.page {
+  margin: 0 auto;
+  max-width: 900px;
+  padding: var(--tabi-space-5) var(--tabi-space-4);
+}
+.page h1 {
+  font-size: var(--tabi-font-size-heading);
+  line-height: var(--tabi-line-height-compact);
+  margin-top: 0;
+}
+.page h2 {
+  font-size: var(--tabi-font-size-title);
+  margin-top: var(--tabi-space-6);
+}
+.page form {
+  display: grid;
+  gap: var(--tabi-space-3);
+  max-width: 480px;
+}
+.page form label {
+  display: grid;
+  gap: var(--tabi-space-1);
+}
+.page ul {
+  padding-left: var(--tabi-space-5);
+}
+.page li {
+  margin: var(--tabi-space-3) 0;
+}
+.vehicle-list span {
+  color: var(--tabi-color-text-muted);
+  display: block;
+  font-size: var(--tabi-font-size-caption);
+}
+.vehicle-select {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--tabi-color-info);
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+.vehicle-map {
+  margin-bottom: var(--tabi-space-4);
+}
+.vehicle-map-canvas {
+  height: min(52vh, 440px);
+  min-height: 280px;
+  width: 100%;
+}
+.vehicle-selection {
+  border-left: 4px solid var(--tabi-color-brand);
+  margin-top: var(--tabi-space-4);
+  padding-left: var(--tabi-space-3);
+}
+.vehicle-selection h2 {
+  margin-top: 0;
+}
+.notice {
+  background: #fff3d6;
+  border-left: 4px solid var(--tabi-color-warning);
+  padding: var(--tabi-space-3);
+}
+.page button + button {
+  margin-left: var(--tabi-space-2);
+}
+
+@media (min-width: 768px) {
+  .page {
+    padding: var(--tabi-space-8);
+  }
+}
+@media (min-width: 1024px) {
+  .shell {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  .topbar {
+    display: none;
+  }
+  .sidebar {
+    background: var(--tabi-color-surface);
+    border-right: 1px solid var(--tabi-color-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--tabi-space-3);
+    padding: var(--tabi-space-5);
+  }
+  .sidebar nav {
+    display: grid;
+    gap: var(--tabi-space-2);
+  }
+  .sidebar a[aria-current="page"],
+  .topbar a[aria-current="page"] {
+    color: var(--tabi-color-brand-strong);
+    font-weight: var(--tabi-font-weight-bold);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

@@ -24,3 +24,10 @@ func TestLoadRejectsInvalidBound(t *testing.T) {
 		t.Fatal("accepted zero")
 	}
 }
+
+func TestAllowedOriginsRejectsWildcardAndNormalizesSlash(t *testing.T) {
+	got := allowedOrigins("http://localhost:5173/, *, https://preview.example, ftp://invalid")
+	if len(got) != 2 || got[0] != "http://localhost:5173" || got[1] != "https://preview.example" {
+		t.Fatalf("allowed origins = %#v", got)
+	}
+}

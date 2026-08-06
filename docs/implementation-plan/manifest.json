@@ -1,6 +1,6 @@
 {
   "project": "Tabi",
-  "generated": "2026-07-22",
+  "generated": "2026-08-05",
   "entry_point": "00_README.md",
   "ingestion_order": "INGESTION_ORDER.md",
   "canonical_deployment": "Single Linux server with Docker Compose and Caddy",
@@ -161,6 +161,13 @@
       "executable": false,
       "doc_id": "TAB-PLAN-021",
       "title": "Optional Fly.io Deployment"
+    },
+    {
+      "path": "22_WEB_APPLICATION_PLAN.md",
+      "type": "md",
+      "executable": false,
+      "doc_id": "TAB-PLAN-022",
+      "title": "Responsive Web Application Implementation Plan"
     },
     {
       "path": "INGESTION_ORDER.md",

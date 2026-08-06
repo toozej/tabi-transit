@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-005
 title: "Maps, Search, Geocoding and Trip Planning"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["maps-agent", "mobile-agent", "backend-agent"]
 depends_on: ["TAB-PLAN-002", "TAB-PLAN-004", "TAB-PLAN-006", "TAB-PLAN-017"]
 ---
@@ -15,11 +15,29 @@ depends_on: ["TAB-PLAN-002", "TAB-PLAN-004", "TAB-PLAN-006", "TAB-PLAN-017"]
 Use separate environment tokens:
 
 - Mobile public token with only native Maps SDK/style scopes.
+- Browser public token with only browser Maps SDK/style scopes and an allowlist
+  of Tabi's public origins. This token is intentionally exposed to the browser;
+  it must never be a server, download, Search, or Geocoding token.
 - CI/EAS SDK download token if required, stored as a secret.
 - Backend Search/Geocoding token with minimum scopes.
 - Never use a broad account default token in production.
 - Configure Mapbox budgets, alerts, usage dashboards, and rotation.
 - Retain required logo/attribution and expose the native SDK telemetry/anonymous usage control.
+
+## Browser Mapbox GL integration
+
+- Use the pinned `mapbox-gl` browser SDK behind `apps/web/src/maps/VehicleMap.tsx`.
+- Configure its optional restricted public token as
+  `VITE_MAPBOX_ACCESS_TOKEN`, and its approved style URL as
+  `VITE_MAPBOX_STYLE_URL`. `VITE_*` values are public build-time values.
+- Keep vehicle rendering to GeoJSON sources and style layers; do not create one
+  DOM marker per vehicle. Keep the selected vehicle in its own source.
+- Preserve the complete semantic vehicle list and detail flow when the token is
+  absent or the map fails. Browser map rendering does not authorize Mapbox
+  Search, Geocoding, Directions, or any provider call from the Tabi API.
+- Before production enablement, complete D-020: public-origin restriction,
+  approved style/attribution and telemetry treatment, budget alerts, and
+  supported-browser/accessibility checks.
 
 ## Expo/RNMapbox integration
 

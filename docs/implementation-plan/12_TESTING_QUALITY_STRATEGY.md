@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-012
 title: "Testing and Quality Strategy"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["qa-agent", "mobile-agent", "backend-agent", "data-agent", "security-agent"]
 depends_on: ["TAB-PLAN-001", "TAB-PLAN-003"]
 ---
@@ -25,6 +25,10 @@ Required for domain/filter/ranking/freshness/time/service-day/GeoJSON/search nor
 React Native Testing Library with a Vitest-compatible harness proven in Phase 0. Test loading/empty/error/stale, permission denial, labels/roles, arrival rows, filters, planner forms, alerts/sheets, and navigation intent.
 
 Do not JS-test native Mapbox rendering; Vitest tests layer/source builders and Maestro tests native behavior. If the harness is incompatible, write an ADR; do not silently add a duplicate Jest suite. Keep logic in Vitest and move native assertions to Maestro/platform tests.
+
+## Web
+
+Vitest and React Testing Library cover pure/client component behavior. Playwright covers the responsive shell and critical rider flows in Chromium, Firefox, and WebKit; verify iOS Safari and Chrome for Android on devices or documented equivalent. Add axe checks, keyboard-only flows, focus restoration, 200% zoom/reflow, screen-reader manual scripts, storage-denied/offline/slow-network cases, CSP/header assertions, and browser-map adapter/fallback checks. Browser and native evidence are distinct release records.
 
 ## Go
 

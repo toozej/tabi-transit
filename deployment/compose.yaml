@@ -5,6 +5,7 @@ x-backend-environment: &backend-environment
   HTTP_LISTEN_ADDR: ${HTTP_LISTEN_ADDR:-:8080}
   LOG_FORMAT: ${LOG_FORMAT:-json}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  TABI_WEB_ALLOWED_ORIGINS: ${TABI_WEB_ALLOWED_ORIGINS:-}
   DATABASE_HOST: postgres
   DATABASE_PORT: "5432"
   DATABASE_NAME: ${POSTGRES_DB:-tabi}
@@ -42,6 +43,8 @@ services:
       TABI_API_DOMAIN: ${TABI_API_DOMAIN:?set TABI_API_DOMAIN in .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Deployment publishes a versioned Vite artifact here; it never contains secrets.
+      - ${TABI_WEB_ASSET_DIR:-./web}:/srv/tabi-web:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

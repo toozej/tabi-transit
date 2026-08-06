@@ -1,4 +1,7 @@
 {
   "files": [],
-  "references": [{ "path": "./packages/transit-domain" }]
+  "references": [
+    { "path": "./packages/transit-domain" },
+    { "path": "./packages/design-tokens" }
+  ]
 }

@@ -290,6 +290,25 @@ func TestUnavailableAndRateLimit(t *testing.T) {
 	}
 }
 
+func TestWebCORSUsesAnExplicitAllowlist(t *testing.T) {
+	c := config.Config{API: config.PublicAPI{AllowedWebOrigins: []string{"http://localhost:5173"}}, RateLimit: config.RateLimit{Requests: 20, Window: time.Hour}}
+	h := api.New(application.Service{Catalog: fakeCatalog{}, Vehicles: fakeVehicles{}}, c)
+	allowed := httptest.NewRequest(http.MethodOptions, "/v1/vehicles", nil)
+	allowed.Header.Set("Origin", "http://localhost:5173")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, allowed)
+	if w.Code != http.StatusNoContent || w.Header().Get("Access-Control-Allow-Origin") != "http://localhost:5173" || w.Header().Get("Access-Control-Allow-Credentials") != "" {
+		t.Fatalf("allowed CORS response: %d %#v", w.Code, w.Header())
+	}
+	disallowed := httptest.NewRequest(http.MethodGet, "/v1/vehicles", nil)
+	disallowed.Header.Set("Origin", "https://untrusted.example")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, disallowed)
+	if w.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("disallowed origin received CORS headers: %#v", w.Header())
+	}
+}
+
 func TestPhaseThreeFeatureGatesFailClosed(t *testing.T) {
 	h := testServer(t, fakeVehicles{})
 	config := request(h, "/v1/config")

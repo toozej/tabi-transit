@@ -21,6 +21,39 @@ make format-check lint typecheck test
 `make format` writes formatting changes. `make format-check` is the non-mutating
 check used by CI. `make test` runs TypeScript unit tests and `go test ./...`.
 
+## Web application
+
+The web app is runnable without provider credentials in deterministic fixture
+mode:
+
+```sh
+make prereqs-web
+make dev-web
+```
+
+`prereqs-web` installs the locked workspace dependencies and generates the
+shared design-token CSS that Vite imports. `dev-web` repeats that safe setup so
+a fresh checkout does not fail on a missing generated token artifact.
+
+To exercise the Tabi API locally, copy `apps/web/.env.example` to the ignored
+`apps/web/.env.local`, set `VITE_TABI_DATA_MODE=remote`, and keep
+`VITE_TABI_API_BASE_URL=/v1`. Set the Vite-only proxy target in that same file:
+
+```dotenv
+TABI_WEB_API_PROXY=http://127.0.0.1:8080
+```
+
+Then start the local API separately after its database/configuration is ready.
+The proxy value is read only by Vite's Node process; browser requests remain
+same-origin at `/v1`.
+
+Browser maps are disabled pending D-004. There is intentionally no Mapbox
+credential setting for the web app today. Never put a Mapbox secret, Search
+token, or any privileged provider credential in `VITE_*`: those values are
+compiled into the public browser bundle. A future approved browser map may use
+only a domain-restricted public token in `apps/web/.env.local`; sensitive
+credentials remain server-side secret files.
+
 The following commands deliberately fail until their owning work package has
 provided its runnable implementation instead of returning a false successful
 placeholder:

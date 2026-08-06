@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-003
 title: "Repository and Engineering Standards"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["repo-agent", "all-implementation-agents"]
 depends_on: ["TAB-PLAN-002"]
 ---
@@ -15,6 +15,7 @@ depends_on: ["TAB-PLAN-002"]
 ```text
 tabi/
 ├── apps/mobile/
+├── apps/web/
 ├── services/{transit-api,gtfs-importer,realtime-poller,notification-worker}/
 ├── internal/{api,application,config,domain,persistence,sources,observability}/
 ├── packages/{api-client,transit-domain,eslint-config,tsconfig}/
@@ -79,6 +80,14 @@ CI and agents use these interfaces rather than private package commands.
 - Platform APIs and Mapbox behind adapters.
 - Development builds, not Expo Go.
 - Custom native modules require ADR and platform tests.
+
+## Web
+
+- `apps/web` is a first-class responsive React application, not an embedded native build.
+- Semantic HTML is the accessibility baseline; pointer-only and hover-only interactions are prohibited for required tasks.
+- Browser APIs, IndexedDB, map SDK, service worker, notifications, and external links stay behind web platform adapters.
+- Share pure domain, API, validation, formatting, query-key, and token code with mobile; do not share platform UI components by default.
+- Public web configuration contains no secrets. Production API calls are same-origin; development CORS origins are explicit.
 
 ## Go
 

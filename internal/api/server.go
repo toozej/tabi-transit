@@ -40,7 +40,7 @@ func New(app application.Service, c config.Config, options ...Option) http.Handl
 		o(s)
 	}
 	r := chi.NewRouter()
-	r.Use(s.requestID, s.recover, s.securityHeaders, s.limit)
+	r.Use(s.requestID, s.recover, s.cors, s.securityHeaders, s.limit)
 	r.Get("/health/live", s.live)
 	r.Get("/health/ready", s.readiness)
 	r.Route("/v1", func(r chi.Router) {
@@ -627,6 +627,34 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// cors permits only explicitly configured local-development origins. Browser
+// production traffic is same-origin through Caddy; wildcard origins and
+// credentials are intentionally never emitted.
+func (s *Server) cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimRight(r.Header.Get("Origin"), "/")
+		allowed := false
+		for _, candidate := range s.config.API.AllowedWebOrigins {
+			if origin == candidate {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match")
+			w.Header().Set("Access-Control-Max-Age", "600")
+			w.Header().Add("Vary", "Origin")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }

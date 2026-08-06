@@ -25,7 +25,7 @@ export PRE_COMMIT_HOME := $(CURDIR)/.cache/pre-commit
 export SEMGREP_SETTINGS_FILE := $(CURDIR)/.cache/semgrep/settings.yml
 export XDG_CACHE_HOME := $(CURDIR)/.cache
 
-.PHONY: all clean help prereqs prereqs-ios-simulators prereqs-android-simulators bootstrap bootstrap-ios-simulators format format-check lint typecheck test test-unit test-js test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile ios-simulators ios-iphone-13-mini ios-iphone-air android-simulators android-motorola-razr-2024 android-pixel-10-pro android-sony-xperia-1-ii dev-poller build doctor tools-install go-tools-install python-tools-install pre-commit-tools-install pre-commit-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
+.PHONY: all clean help prereqs prereqs-web prereqs-ios-simulators prereqs-android-simulators bootstrap bootstrap-ios-simulators format format-check lint typecheck test test-unit test-js test-web test-web-preview test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-web ios-simulators ios-iphone-13-mini ios-iphone-air android-simulators android-motorola-razr-2024 android-pixel-10-pro android-sony-xperia-1-ii dev-poller build doctor tools-install go-tools-install python-tools-install pre-commit-tools-install pre-commit-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
 .PHONY: $(GO_TOOL_INSTALL_TARGETS)
 
 all: pre-commit-run build ## Run repository checks and build all applications
@@ -40,6 +40,10 @@ prereqs: tools-install ## Install pinned dependencies, tools, and host-specific 
 	@corepack pnpm install --frozen-lockfile
 	@$(MAKE) prereqs-ios-simulators
 	@$(MAKE) prereqs-android-simulators
+
+prereqs-web: ## Install web dependencies and generate its shared token CSS
+	@corepack pnpm install --frozen-lockfile
+	@corepack pnpm --filter @tabi/design-tokens build
 
 prereqs-ios-simulators: ## Install Xcode components and configured iOS runtimes on macOS
 	@if test "$$(uname -s)" = Darwin; then \
@@ -70,10 +74,20 @@ lint: ## Run repository linters
 
 typecheck: ## Run TypeScript type checks
 	@corepack pnpm typecheck
+	@corepack pnpm --dir apps/web typecheck
 
 test-js: ## Run JavaScript and mobile unit tests
 	@corepack pnpm test
 	@corepack pnpm --dir apps/mobile test
+	@$(MAKE) test-web
+
+test-web: ## Run deterministic web unit tests
+	@corepack pnpm --dir apps/web test
+	@tests/quality/web_deployment_policy_test.sh
+
+test-web-preview: ## Build the web app and start a local immutable-asset preview
+	@corepack pnpm --dir apps/web build
+	@corepack pnpm --dir apps/web preview:smoke
 
 test-go: ## Run Go unit tests
 	@GOCACHE=$(GO_CACHE_DIR) go test ./...
@@ -146,6 +160,10 @@ dev-api: ## Run the local transit API
 dev-mobile: ## Run the Expo mobile development client
 	@test -f apps/mobile/package.json || { echo 'mobile app missing: apps/mobile/package.json (WP-08)'; exit 1; }
 	@corepack pnpm --dir apps/mobile start -- --dev-client
+
+dev-web: prereqs-web ## Run the Vite web application
+	@test -f apps/web/package.json || { echo 'web app missing: apps/web/package.json'; exit 1; }
+	@corepack pnpm --dir apps/web dev
 
 ios-simulators: ## Create the configured iOS 18 and iOS 26 simulators
 	@corepack pnpm --dir apps/mobile ios:simulators

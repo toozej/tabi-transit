@@ -25,12 +25,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/mobile/scripts/**/*.mjs"],
+    files: ["apps/mobile/scripts/**/*.mjs", "apps/web/scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         Buffer: "readonly",
         console: "readonly",
+        fetch: "readonly",
         process: "readonly",
+        URL: "readonly",
       },
     },
   },

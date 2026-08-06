@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-001
 title: "Product Requirements and Acceptance Criteria"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["product-agent", "mobile-agent", "backend-agent", "qa-agent"]
 depends_on: ["TAB-PLAN-000"]
 ---
@@ -16,7 +16,7 @@ Tabi helps riders find, understand, and navigate Portland-area transit using sch
 
 ## Platforms and roles
 
-- iOS and Android phones; responsive tablet support without a separate first-release design.
+- Responsive web application for current desktop and mobile browsers, plus iOS and Android native apps; tablet layouts are responsive rather than separate products.
 - No account required for core use.
 - Roles: rider, power user/transit enthusiast, anonymous notification subscriber, and operator/maintainer through internal observability only.
 
@@ -101,10 +101,11 @@ Tabi helps riders find, understand, and navigate Portland-area transit using sch
 ### Accessibility
 
 - Text/list alternative for every map flow.
-- VoiceOver/TalkBack labels include route, direction, state, and freshness.
+- VoiceOver/TalkBack and browser screen-reader labels include route, direction, state, and freshness.
 - Dynamic type/font scale, reduced motion, adequate targets and contrast.
+- Keyboard-only browser operation, visible focus, skip navigation, and managed dialog/sheet focus.
 - Color never the only signal.
-- Both platforms manually tested before release.
+- Each supported platform manually tested before release.
 
 ### Initial performance budgets
 
@@ -147,6 +148,7 @@ Measured on a representative mid-range supported device:
 8. Favorites and bounded offline cache.
 9. Credits/privacy/attribution.
 10. Production CI/CD, monitoring, backups, and store release.
+11. Responsive web release with equivalent rider outcomes for the first nine items.
 
 Specialist views, push, history, and OpenTripPlanner are post-MVP unless approvals and capacity make them low-risk. TriMet-provided Streetcar coverage follows the normal TriMet source gate.
 

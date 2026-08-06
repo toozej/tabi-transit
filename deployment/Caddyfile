@@ -4,16 +4,29 @@
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
-		Referrer-Policy "no-referrer"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+		Content-Security-Policy-Report-Only "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self'"
 		-Server
 	}
 
-	reverse_proxy api:8080 {
-		trusted_proxies static private_ranges
-		trusted_proxies_strict
-		health_uri /health/ready
-		health_interval 30s
-		health_timeout 5s
-	}
+	@api path /v1/* /health/*
+	route {
+		reverse_proxy @api api:8080 {
+			trusted_proxies static private_ranges
+			trusted_proxies_strict
+			health_uri /health/ready
+			health_interval 30s
+			health_timeout 5s
+		}
 
+		# Vite emits content-hashed assets. HTML remains revalidatable so a rollback
+		# can point riders at the previous immutable release without stale entry HTML.
+		@immutableAssets path /assets/*
+		header @immutableAssets Cache-Control "public, max-age=31536000, immutable"
+		root * /srv/tabi-web
+		try_files {path} /index.html
+		file_server
+	}
 }

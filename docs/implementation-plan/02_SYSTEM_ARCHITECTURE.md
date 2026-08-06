@@ -2,7 +2,7 @@
 doc_id: TAB-PLAN-002
 title: "System Architecture"
 status: implementation-ready
-last_updated: 2026-07-22
+last_updated: 2026-08-05
 intended_agents: ["architecture-agent", "backend-agent", "mobile-agent", "infra-agent"]
 depends_on: ["TAB-PLAN-001"]
 ---
@@ -27,7 +27,9 @@ depends_on: ["TAB-PLAN-001"]
 
 ```mermaid
 flowchart LR
+  User --> Web[Responsive Web App]
   User --> Mobile[Expo React Native App]
+  Web --> API
   Mobile --> Mapbox[Mapbox Native SDK]
   Mobile --> API[Tabi Go API]
   Mobile --> Links[External Maps Deep Links]
@@ -72,19 +74,16 @@ Evaluates subscriptions, deduplicates, honors quiet hours/expiry, sends push, pr
 
 Separate Java container and Compose profile only after an ADR demonstrates a TriMet planner gap worth OSM/GTFS graph operations and the host has measured capacity.
 
-## Mobile boundaries
+## Client boundaries
 
 ```text
-app/          Expo Router route files only
-src/features  Screen orchestration and feature UI
-src/domain    Pure TypeScript models/policies
-src/data      API and SQLite repositories
-src/platform  Expo/native wrappers
-src/maps      RNMapbox adapter, sources, layers
-src/ui        Shared accessible components/tokens
+packages/     Pure TypeScript domain, API client, schemas, query keys, tokens
+apps/mobile/  Expo Router, native UI, SQLite, Expo/native wrappers, RNMapbox
+apps/web/     Web router, semantic HTML UI, IndexedDB, browser wrappers, web map adapter
 ```
 
-TanStack Query owns server state; Zustand owns ephemeral UI state; SQLite owns local/static persistence.
+TanStack Query owns server state; client-local UI stores own ephemeral state;
+SQLite (native) and IndexedDB (web) own device-local/static persistence.
 
 ## Data authority
 
