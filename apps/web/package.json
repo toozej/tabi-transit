@@ -15,18 +15,18 @@
   "dependencies": {
     "@tabi/api-client": "workspace:*",
     "@tabi/design-tokens": "workspace:*",
-    "@tanstack/react-query": "5.66.8",
-    "mapbox-gl": "3.15.0",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "react-router-dom": "7.7.1",
-    "zod": "3.24.2"
+    "@tanstack/react-query": "5.101.4",
+    "mapbox-gl": "3.27.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.2",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/react": "19.0.10",
-    "@types/react-dom": "19.0.4",
-    "@vitejs/plugin-react": "4.4.1",
-    "vite": "6.2.2",
-    "vitest": "3.2.4"
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
   }
 }
