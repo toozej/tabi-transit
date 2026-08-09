@@ -26,7 +26,7 @@ uses the highest installed patch in that release line.
 
 | Target         | Runtime selection          | Launch command            | Evidence focus                                |
 | -------------- | -------------------------- | ------------------------- | --------------------------------------------- |
-| iPhone 13 mini | Highest installed iOS 18.x | `make ios-iphone-13-mini` | Compact viewport, max text, VoiceOver         |
+| iPhone 13 mini | Highest installed iOS 26.x | `make ios-iphone-13-mini` | Compact viewport, max text, VoiceOver         |
 | iPhone Air     | Highest installed iOS 26.x | `make ios-iphone-air`     | Current UI behavior, VoiceOver, reduce motion |
 
 Simulator success does not replace physical-device testing of performance,
@@ -39,5 +39,5 @@ OEM behavior remains a physical-device gate.
 | Target              | Runtime             | Launch command                    | Evidence focus                               |
 | ------------------- | ------------------- | --------------------------------- | -------------------------------------------- |
 | Motorola Razr 2024  | Android 16 / API 36 | `make android-motorola-razr-2024` | Foldable layout, compact posture, TalkBack   |
-| Google Pixel 10 Pro | Android 17 / API 37 | `make android-pixel-10-pro`       | Current platform UI, TalkBack, reduce motion |
+| Google Pixel 10 Pro | Android 16 / API 36 | `make android-pixel-10-pro`       | Current platform UI, TalkBack, reduce motion |
 | Sony Xperia 1 II    | Android 12 / API 31 | `make android-sony-xperia-1-ii`   | Tall viewport, minimum supported behavior    |

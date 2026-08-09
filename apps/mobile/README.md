@@ -35,27 +35,25 @@ corepack pnpm --dir apps/mobile prebuild
 ## Intel Mac iOS simulators
 
 The repository pins Xcode 26.3 in the root `.xcode-version`. This is the newest
-Xcode release supported by macOS Sequoia and supports iOS Simulator runtimes
-from iOS 15 through iOS 26.2. On the Intel MacBook Pro, install macOS Sequoia
+Xcode release supported by macOS Sequoia. On the Intel MacBook Pro, install macOS Sequoia
 15.6 or newer and select Xcode 26.3 before creating the targets:
 
 ```sh
 sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-make prereqs
 make ios-simulators
 ```
 
-`make prereqs` includes `make prereqs-ios-simulators`. On macOS, the
-explicit target runs Xcode's first-launch component installation and downloads
-the universal iOS 18.5 and iOS 26.2 Simulator runtimes when an equal-or-newer
-patch in the corresponding major release is not already installed. On other
-operating systems it reports that the iOS step is skipped while still
-installing the repository's pinned tools and JavaScript dependencies. `make
-bootstrap` remains as a compatibility alias for existing local workflows.
+Every iOS simulator and device launch target first installs the locked mobile
+workspace dependencies and then runs `make prereqs-ios-simulators`. On macOS,
+that target runs Xcode's first-launch component installation and downloads the
+universal iOS 26.2 Simulator runtime when an equal-or-newer patch is not
+already installed. `make prereqs` additionally installs the repository's
+pinned general-purpose tools and Android prerequisites; `make bootstrap`
+remains as a compatibility alias for existing local workflows.
 
 The simulator manifest is `ios-simulators.json`. Setup creates an iPhone 13
-mini using the highest installed iOS 18.x runtime and an iPhone Air using the
-highest installed iOS 26.x runtime. Names include the selected runtime version,
+mini and an iPhone Air using the highest installed iOS 26.x runtime. Names
+include the selected runtime version,
 so installing a newer patch and rerunning setup creates a new target without
 deleting the old one.
 
@@ -64,7 +62,6 @@ Xcode > Settings > Components > Add Platforms. For the current
 Sequoia-compatible toolchain, the command-line equivalents for Intel are:
 
 ```sh
-xcodebuild -downloadPlatform iOS -buildVersion 18.5 -architectureVariant universal
 xcodebuild -downloadPlatform iOS -buildVersion 26.2 -architectureVariant universal
 ```
 
@@ -88,24 +85,22 @@ documentation.
 ## Intel Mac Android emulators
 
 The Android emulator setup is also configured for the Intel macOS Sequoia
-host. Homebrew must already be installed. The Android prerequisite target uses
-`Brewfile.android` to install the current stable Android Studio application and
-Android SDK Command-Line Tools, prompts for Android SDK license acceptance, and
-installs or updates the emulator, platform/build tools, and x86_64 Google APIs
-system images for API 31, 36, and 37:
+host. Homebrew must already be installed. Every Android emulator and device
+launch target first installs the locked mobile workspace dependencies and runs
+the Android prerequisite target, which uses `Brewfile.android` to install the
+current stable Android Studio application, Android SDK Command-Line Tools, and
+OpenJDK 21; prompts for Android SDK license acceptance; and installs or updates
+the emulator, platform/build tools, and x86_64 Google APIs system images for
+API 31 and 36:
 
-```sh
-make prereqs-android-simulators
-```
-
-This target is included in `make prereqs` on macOS and is skipped on other
-operating systems. SDK packages are managed under `ANDROID_SDK_ROOT` or
+The Android prerequisite target is also included in `make prereqs` on macOS
+and is skipped on other operating systems. SDK packages are managed under `ANDROID_SDK_ROOT` or
 `ANDROID_HOME` when either is set, otherwise under the standard
 `~/Library/Android/sdk` location. The SDK manager refreshes installed package
 revisions, so each API-level image receives the latest patch available for that
 package.
 
-Create the three configured Android Virtual Devices after prerequisites finish:
+Create the configured Android Virtual Devices (its prerequisites run automatically):
 
 ```sh
 make android-simulators
@@ -114,9 +109,19 @@ make android-simulators
 Build, boot, and launch the Expo development app on a specific device with:
 
 ```sh
+make android # Default: Motorola Razr 2024 / Android 16
 make android-motorola-razr-2024
 make android-pixel-10-pro
 make android-sony-xperia-1-ii
+```
+
+Forcefully stop all running emulators when a simulator is hung or no longer
+needed:
+
+```sh
+make stop-ios-simulators
+make stop-android-simulators
+make stop-simulators # Stop both platforms
 ```
 
 The manifest in `android-emulators.json` models these targets:
@@ -124,7 +129,7 @@ The manifest in `android-emulators.json` models these targets:
 | Target              | System image        | Display profile                       |
 | ------------------- | ------------------- | ------------------------------------- |
 | Motorola Razr 2024  | Android 16 / API 36 | 1080 × 2640 at 413 dpi, foldable base |
-| Google Pixel 10 Pro | Android 17 / API 37 | 1280 × 2856 at 495 dpi                |
+| Google Pixel 10 Pro | Android 16 / API 36 | 1280 × 2856 at 495 dpi                |
 | Sony Xperia 1 II    | Android 12 / API 31 | 1644 × 3840 at 643 dpi                |
 
 These are AVD compatibility profiles, not OEM firmware emulators. Google APIs

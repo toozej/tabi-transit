@@ -74,9 +74,12 @@ function androidEnvironment() {
     ANDROID_SDK_ROOT: sdkRoot,
     ANDROID_AVD_HOME: avdHome,
   };
+  const java21 = "/usr/local/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home";
   const bundledJava =
     "/Applications/Android Studio.app/Contents/jbr/Contents/Home";
-  if (!environment.JAVA_HOME && existsSync(bundledJava)) {
+  if (!environment.JAVA_HOME && existsSync(java21)) {
+    environment.JAVA_HOME = java21;
+  } else if (!environment.JAVA_HOME && existsSync(bundledJava)) {
     environment.JAVA_HOME = bundledJava;
   }
   return environment;
@@ -303,12 +306,17 @@ function runningSerial(target, adb) {
       encoding: "utf8",
       env: androidEnvironment(),
     });
-    return name.status === 0 && name.stdout.split("\n")[0] === target.avdName;
+    return (
+      name.status === 0 &&
+      name.stdout.trim().split(/\r?\n/)[0] === target.avdName
+    );
   });
 }
 
 function waitForEmulator(target, adb) {
-  const deadline = Date.now() + 180_000;
+  // A newly created AVD may need to expand its disk image before Android can
+  // report boot completion; three minutes is not reliable on a cold host.
+  const deadline = Date.now() + 300_000;
   while (Date.now() < deadline) {
     const serial = runningSerial(target, adb);
     if (serial) {
@@ -323,7 +331,7 @@ function waitForEmulator(target, adb) {
     }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
   }
-  fail(`${target.displayName} did not finish booting within three minutes`);
+  fail(`${target.displayName} did not finish booting within five minutes`);
 }
 
 function bootEmulator(targetId) {
@@ -380,11 +388,11 @@ if (action === "prereqs") {
   if (!targetId) {
     fail("run requires a target ID");
   }
-  const { serial } = bootEmulator(targetId);
+  const { target } = bootEmulator(targetId);
   execute(
     "corepack",
-    ["pnpm", "exec", "expo", "run:android", "--device", serial],
-    { inherit: true },
+    ["pnpm", "exec", "expo", "run:android", "--device", target.avdName],
+    { env: androidEnvironment(), inherit: true },
   );
 } else {
   fail("expected list, prereqs, ensure-all, ensure <target>, or run <target>");

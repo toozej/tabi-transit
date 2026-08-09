@@ -25,7 +25,7 @@ export PRE_COMMIT_HOME := $(CURDIR)/.cache/pre-commit
 export SEMGREP_SETTINGS_FILE := $(CURDIR)/.cache/semgrep/settings.yml
 export XDG_CACHE_HOME := $(CURDIR)/.cache
 
-.PHONY: all clean help prereqs prereqs-web prereqs-ios-simulators prereqs-android-simulators bootstrap bootstrap-ios-simulators format format-check lint typecheck test test-unit test-js test-web test-web-preview test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-web ios-simulators ios-iphone-13-mini ios-iphone-air android-simulators android-motorola-razr-2024 android-pixel-10-pro android-sony-xperia-1-ii dev-poller build doctor tools-install go-tools-install python-tools-install pre-commit-tools-install pre-commit-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
+.PHONY: all clean help prereqs prereqs-web prereqs-mobile prereqs-ios-simulators prereqs-android-simulators bootstrap bootstrap-ios-simulators format format-check lint typecheck test test-unit test-js test-web test-web-preview test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-web ios-simulators ios-iphone-13-mini ios-iphone-air android android-simulators android-motorola-razr-2024 android-pixel-10-pro android-sony-xperia-1-ii stop-ios-simulators stop-android-simulators stop-simulators dev-poller build doctor tools-install go-tools-install python-tools-install pre-commit-tools-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
 .PHONY: $(GO_TOOL_INSTALL_TARGETS)
 
 all: pre-commit-run build ## Run repository checks and build all applications
@@ -36,23 +36,26 @@ clean: ## Remove local repository tool and cache artifacts
 help: ## Display available Make targets
 	@grep -E '^[a-zA-Z0-9_-]+ ?:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
 
-prereqs: tools-install ## Install pinned dependencies, tools, and host-specific prerequisites
-	@corepack pnpm install --frozen-lockfile
+prereqs: tools-install prereqs-mobile ## Install pinned dependencies, tools, and host-specific prerequisites
 	@$(MAKE) prereqs-ios-simulators
 	@$(MAKE) prereqs-android-simulators
+
+prereqs-mobile: ## Install locked mobile workspace dependencies
+	@command -v corepack >/dev/null 2>&1 || { echo 'Corepack is required; install a supported Node.js 20.19-22 release with Corepack enabled.' >&2; exit 1; }
+	@corepack pnpm install --frozen-lockfile
 
 prereqs-web: ## Install web dependencies and generate its shared token CSS
 	@corepack pnpm install --frozen-lockfile
 	@corepack pnpm --filter @tabi/design-tokens build
 
-prereqs-ios-simulators: ## Install Xcode components and configured iOS runtimes on macOS
+prereqs-ios-simulators: prereqs-mobile ## Install mobile dependencies, Xcode components, and configured iOS runtimes on macOS
 	@if test "$$(uname -s)" = Darwin; then \
 		corepack pnpm --dir apps/mobile ios:prereqs; \
 	else \
 		echo 'Skipping iOS Simulator prerequisites (requires macOS)'; \
 	fi
 
-prereqs-android-simulators: ## Install Android Studio, SDK tools, and configured runtimes on Intel macOS
+prereqs-android-simulators: prereqs-mobile ## Install mobile dependencies, Android Studio, SDK tools, and configured runtimes on Intel macOS
 	@if test "$$(uname -s)" = Darwin; then \
 		corepack pnpm --dir apps/mobile android:prereqs; \
 	else \
@@ -165,26 +168,51 @@ dev-web: prereqs-web ## Run the Vite web application
 	@test -f apps/web/package.json || { echo 'web app missing: apps/web/package.json'; exit 1; }
 	@corepack pnpm --dir apps/web dev
 
-ios-simulators: ## Create the configured iOS 18 and iOS 26 simulators
+ios-simulators: prereqs-ios-simulators ## Install iOS prerequisites and create the configured iOS 26 simulators
 	@corepack pnpm --dir apps/mobile ios:simulators
 
-ios-iphone-13-mini: ## Build and run mobile on iPhone 13 mini with latest installed iOS 18
+ios-iphone-13-mini: prereqs-ios-simulators ## Install iOS prerequisites, then build and run mobile on iPhone 13 mini with latest installed iOS 26
 	@corepack pnpm --dir apps/mobile ios:iphone-13-mini
 
-ios-iphone-air: ## Build and run mobile on iPhone Air with latest installed iOS 26
+ios-iphone-air: prereqs-ios-simulators ## Install iOS prerequisites, then build and run mobile on iPhone Air with latest installed iOS 26
 	@corepack pnpm --dir apps/mobile ios:iphone-air
 
-android-simulators: ## Create the configured Android 12, 16, and 17 emulators
+android-simulators: prereqs-android-simulators ## Install Android prerequisites and create the configured Android 12 and 16 emulators
 	@corepack pnpm --dir apps/mobile android:simulators
 
-android-motorola-razr-2024: ## Build and run mobile on Motorola Razr 2024 with Android 16
+android: prereqs-android-simulators ## Install Android prerequisites, then build and run mobile on the default Motorola Razr 2024 profile
+	@corepack pnpm --dir apps/mobile android
+
+android-motorola-razr-2024: prereqs-android-simulators ## Install Android prerequisites, then build and run mobile on Motorola Razr 2024 with Android 16
 	@corepack pnpm --dir apps/mobile android:motorola-razr-2024
 
-android-pixel-10-pro: ## Build and run mobile on Pixel 10 Pro with Android 17
+android-pixel-10-pro: prereqs-android-simulators ## Install Android prerequisites, then build and run mobile on Pixel 10 Pro with Android 16
 	@corepack pnpm --dir apps/mobile android:pixel-10-pro
 
-android-sony-xperia-1-ii: ## Build and run mobile on Sony Xperia 1 II with Android 12
+android-sony-xperia-1-ii: prereqs-android-simulators ## Install Android prerequisites, then build and run mobile on Sony Xperia 1 II with Android 12
 	@corepack pnpm --dir apps/mobile android:sony-xperia-1-ii
+
+stop-ios-simulators: ## Forcefully stop every running iOS Simulator
+	@if test "$$(uname -s)" = Darwin; then \
+		xcrun simctl shutdown all || true; \
+		pkill -KILL -x Simulator || true; \
+	else \
+		echo 'Skipping iOS Simulator shutdown (requires macOS)'; \
+	fi
+
+stop-android-simulators: ## Forcefully stop every running Android emulator
+	@if test "$$(uname -s)" = Darwin; then \
+		adb_path="$${ANDROID_SDK_ROOT:-$${ANDROID_HOME:-$$HOME/Library/Android/sdk}}/platform-tools/adb"; \
+		if test ! -x "$$adb_path"; then echo "adb is unavailable; run make prereqs-android-simulators" >&2; exit 1; fi; \
+		"$$adb_path" devices | awk '$$1 ~ /^emulator-/ && $$2 == "device" { print $$1 }' | while IFS= read -r serial; do \
+			"$$adb_path" -s "$$serial" emu kill || true; \
+		done; \
+		pkill -KILL -f 'qemu-system.*-avd' || true; \
+	else \
+		echo 'Skipping Android emulator shutdown (requires macOS)'; \
+	fi
+
+stop-simulators: stop-ios-simulators stop-android-simulators ## Forcefully stop every running iOS Simulator and Android emulator
 
 dev-poller: ## Run the local realtime poller
 	@test -f services/realtime-poller/cmd/realtime-poller/main.go || { echo 'realtime poller entrypoint missing: services/realtime-poller/cmd/realtime-poller/main.go'; exit 1; }

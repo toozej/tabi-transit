@@ -6,11 +6,11 @@
   },
   "targets": [
     {
-      "id": "iphone-13-mini-ios-18",
+      "id": "iphone-13-mini-ios-26",
       "name": "Tabi iPhone 13 mini",
       "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-13-mini",
-      "runtimeMajor": 18,
-      "recommendedRuntime": "18.5"
+      "runtimeMajor": 26,
+      "recommendedRuntime": "26.2"
     },
     {
       "id": "iphone-air-ios-26",

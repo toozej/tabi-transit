@@ -1,2 +1,3 @@
 cask "android-studio"
 cask "android-commandlinetools"
+brew "openjdk@21"

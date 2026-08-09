@@ -11,9 +11,7 @@
     "platforms;android-31",
     "platforms;android-35",
     "platforms;android-36",
-    "platforms;android-37",
-    "build-tools;35.0.0",
-    "build-tools;37.0.0"
+    "build-tools;35.0.0"
   ],
   "targets": [
     {
@@ -34,12 +32,12 @@
       }
     },
     {
-      "id": "pixel-10-pro-android-17",
-      "avdName": "Tabi_Pixel_10_Pro_API_37",
+      "id": "pixel-10-pro-android-16",
+      "avdName": "Tabi_Pixel_10_Pro_API_36",
       "displayName": "Google Pixel 10 Pro",
-      "androidVersion": 17,
-      "apiLevel": 37,
-      "systemImage": "system-images;android-37;google_apis;x86_64",
+      "androidVersion": 16,
+      "apiLevel": 36,
+      "systemImage": "system-images;android-36;google_apis;x86_64",
       "deviceCandidates": ["pixel_10_pro", "Pixel 10 Pro", "pixel_9_pro"],
       "hardware": {
         "hw.device.manufacturer": "Google",

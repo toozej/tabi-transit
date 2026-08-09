@@ -3,7 +3,10 @@ import { z } from "zod";
 
 const apiConfigSchema = z.object({
   apiMode: z.enum(["fixture", "remote"]).default("fixture"),
-  apiBaseUrl: z.string().url().optional(),
+  apiBaseUrl: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().url().optional(),
+  ),
 });
 
 export type ApiRuntimeConfig = z.infer<typeof apiConfigSchema>;

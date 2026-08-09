@@ -83,10 +83,12 @@ native setup, use `make dev-mobile`. Physical iOS/Android validation and Maestro
 require an available simulator/emulator or physical device; a build-time check is
 not evidence that Mapbox native rendering works on a device.
 
-On the configured Intel macOS host, `make prereqs` installs the iOS and Android
-development components. Use `make ios-simulators` and `make android-simulators`
-to create the configured virtual devices; device-specific launch targets are
-listed by `make help` and documented in `apps/mobile/README.md`.
+On the configured Intel macOS host, every simulator and device-specific launch
+target installs its own mobile and platform prerequisites. Use `make ios-simulators`
+and `make android-simulators` to create the configured virtual devices;
+device-specific launch targets are listed by `make help` and documented in
+`apps/mobile/README.md`. `make prereqs` remains available to install both
+platforms and the repository's general-purpose tooling together.
 
 ## Service and database checks
 
