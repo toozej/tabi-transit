@@ -41,6 +41,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@expo/vector-icons':
+        specifier: 14.1.0
+        version: 14.1.0(expo-font@13.3.2(expo@53.0.20(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.10)(react@19.0.0)))(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.10)(react@19.0.0))(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.10)(react@19.0.0))(react@19.0.0)
       '@rnmapbox/maps':
         specifier: 10.3.5
         version: 10.3.5(expo@53.0.20(@babel/core@7.29.7)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.10)(react@19.0.0)))(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.10)(react@19.0.0))(react@19.0.0))(react-dom@19.0.0(react@19.0.0))(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.10)(react@19.0.0))(react@19.0.0)

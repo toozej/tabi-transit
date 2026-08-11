@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/build/**",
       "**/coverage/**",
+      "**/.expo/**",
       ".cache/**",
       ".tools/**",
       "docs/implementation-plan/**",

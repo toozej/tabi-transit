@@ -22,6 +22,7 @@
     "test:watch": "vitest --config vitest.config.ts"
   },
   "dependencies": {
+    "@expo/vector-icons": "14.1.0",
     "@rnmapbox/maps": "10.3.5",
     "@tanstack/react-query": "5.66.8",
     "expo": "53.0.20",
