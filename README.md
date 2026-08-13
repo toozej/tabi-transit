@@ -28,8 +28,8 @@ repository check suite. Later runs can use `make pre-commit-run`, while
 Run `make pre-commit-update` to update pinned Go tools and pre-commit hook
 revisions, regenerate checked-in clients, and validate the resulting toolchain.
 A scheduled GitHub Actions workflow runs the same target and opens an auto-merge
-PR when updates are available. The workflow expects repository secrets named
+PR when updates are available. Configure repository secrets named
 `AUTOUPDATE_APP_ID` and `AUTOUPDATE_APP_PRIVATE_KEY`, matching the updater GitHub
-App used by `toozej/monogo`, so CI is triggered for its pull requests. Dependabot
-keeps application, JavaScript, Python-tool, Actions, and container dependencies
-current.
+App installed for this repository, so CI is triggered for its pull requests.
+Without both secrets, the workflow is skipped with a warning. Dependabot keeps
+application, JavaScript, Python-tool, Actions, and container dependencies current.

@@ -20,39 +20,58 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Check autoupdate credentials
+        id: config
+        env:
+          AUTOUPDATE_APP_ID: ${{ secrets.AUTOUPDATE_APP_ID }}
+          AUTOUPDATE_APP_PRIVATE_KEY: ${{ secrets.AUTOUPDATE_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -n "$AUTOUPDATE_APP_ID" && -n "$AUTOUPDATE_APP_PRIVATE_KEY" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping autoupdate because AUTOUPDATE_APP_ID and AUTOUPDATE_APP_PRIVATE_KEY are not both configured."
+          fi
       # Mint a GitHub App installation token. The PR is created with THIS token
       # (not the default GITHUB_TOKEN) on purpose: PRs/pushes made with
       # GITHUB_TOKEN do not trigger other workflows, so CI would never run on the
       # bot PR. An App token does trigger CI, which is what gates auto-merge.
       - name: Generate GitHub App token
         id: app-token
+        if: steps.config.outputs.enabled == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.AUTOUPDATE_APP_ID }}
           private-key: ${{ secrets.AUTOUPDATE_APP_PRIVATE_KEY }}
 
       - name: Check out repository
+        if: steps.config.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
+        if: steps.config.outputs.enabled == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20.19.0
           cache: pnpm
 
       - name: Set up Go
+        if: steps.config.outputs.enabled == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           check-latest: false
 
       - name: Enable Corepack
+        if: steps.config.outputs.enabled == 'true'
         run: corepack enable
 
       - name: Update pinned Go tools and pre-commit hooks
+        if: steps.config.outputs.enabled == 'true'
         run: make pre-commit-update
 
       - name: Ensure dependencies label exists
+        if: steps.config.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -63,6 +82,7 @@ jobs:
 
       - name: Create pull request
         id: cpr
+        if: steps.config.outputs.enabled == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ steps.app-token.outputs.token }}
@@ -80,7 +100,7 @@ jobs:
           labels: dependencies
 
       - name: Enable auto-merge
-        if: steps.cpr.outputs.pull-request-number != ''
+        if: steps.config.outputs.enabled == 'true' && steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh pr merge --squash --auto "${{ steps.cpr.outputs.pull-request-number }}"

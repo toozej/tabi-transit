@@ -60,7 +60,7 @@ WORKDIR /app
 COPY --from=build --chown=nonroot:nonroot /out/ ./
 COPY --chown=nonroot:nonroot db/migrations ./migrations
 
-# Distroless supplies the numeric nonroot account. The image has no shell or
+# Distroless reserves UID/GID 65532 for its nonroot account. The image has no shell or
 # package manager and works with Compose's read-only root filesystem plus /tmp.
-USER nonroot:nonroot
+USER 65532:65532
 CMD ["/app/transit-api"]
