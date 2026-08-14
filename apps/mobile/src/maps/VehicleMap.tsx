@@ -36,7 +36,12 @@ export function VehicleMap({ vehicles, selectedVehicleId }: Props) {
       style={styles.mapContainer}
       accessibilityLabel="Vehicle map; use the vehicle list below for accessible selection"
     >
-      <Mapbox.MapView style={styles.map} styleURL={MAP_STYLE}>
+      <Mapbox.MapView
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        style={styles.map}
+        styleURL={MAP_STYLE}
+      >
         <Mapbox.Camera centerCoordinate={[-122.6765, 45.5231]} zoomLevel={10} />
         <Mapbox.ShapeSource id="vehicles" shape={fleet}>
           <Mapbox.CircleLayer

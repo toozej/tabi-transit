@@ -1,16 +1,37 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Tabs } from "expo-router";
+import { Platform } from "react-native";
+
+import { tabi } from "@/ui/tabi";
 
 export default function TabLayout() {
   return (
-    <Tabs>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: tabi.color.accent,
+        tabBarInactiveTintColor: tabi.color.mutedInk,
+        tabBarHideOnKeyboard: true,
+        tabBarItemStyle: { paddingVertical: Platform.OS === "android" ? 4 : 0 },
+        tabBarLabelStyle: {
+          fontFamily: tabi.type.body,
+          fontSize: Platform.OS === "ios" ? 10 : 11,
+          fontWeight: "700",
+        },
+        tabBarStyle: {
+          backgroundColor: tabi.color.surface,
+          borderTopColor: tabi.color.border,
+          height: Platform.OS === "android" ? 66 : undefined,
+        },
+      }}
+    >
       <Tabs.Screen
         name="nearby"
         options={{
           title: "Nearby",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, focused, size }) => (
             <MaterialCommunityIcons
-              name="map-marker-radius-outline"
+              name={focused ? "map-marker-radius" : "map-marker-radius-outline"}
               color={color}
               size={size}
             />
@@ -21,10 +42,9 @@ export default function TabLayout() {
         name="map"
         options={{
           title: "Map",
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, focused, size }) => (
             <MaterialCommunityIcons
-              name="map-outline"
+              name={focused ? "map" : "map-outline"}
               color={color}
               size={size}
             />
@@ -35,9 +55,11 @@ export default function TabLayout() {
         name="plan"
         options={{
           title: "Plan",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, focused, size }) => (
             <MaterialCommunityIcons
-              name="transit-connection-variant"
+              name={
+                focused ? "transit-connection" : "transit-connection-variant"
+              }
               color={color}
               size={size}
             />
@@ -48,9 +70,9 @@ export default function TabLayout() {
         name="alerts"
         options={{
           title: "Alerts",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, focused, size }) => (
             <MaterialCommunityIcons
-              name="bell-outline"
+              name={focused ? "bell" : "bell-outline"}
               color={color}
               size={size}
             />
@@ -61,9 +83,9 @@ export default function TabLayout() {
         name="saved"
         options={{
           title: "Saved",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, focused, size }) => (
             <MaterialCommunityIcons
-              name="bookmark-outline"
+              name={focused ? "bookmark" : "bookmark-outline"}
               color={color}
               size={size}
             />

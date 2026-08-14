@@ -1,189 +1,427 @@
 @import "@tabi/design-tokens/web.css";
 
+/* A transit wayfinding system: platform, track, signal, evergreen, and blue. */
+:root {
+  --tabi-display:
+    "Arial Narrow", "Roboto Condensed", "Helvetica Neue", sans-serif;
+  --tabi-paper: #fffdf9;
+  --tabi-track: #17221d;
+  --tabi-signal: #a61b34;
+  --tabi-evergreen: #176b44;
+  --tabi-wayfinding: #075d8c;
+}
+
 * {
   box-sizing: border-box;
 }
+
 html {
   background: var(--tabi-color-canvas);
   color: var(--tabi-color-text);
   font-family: var(--tabi-font-family-sans);
+  text-rendering: optimizeLegibility;
 }
+
 body {
   margin: 0;
   min-width: 320px;
   font-size: var(--tabi-font-size-body);
   line-height: var(--tabi-line-height-normal);
 }
+
 a {
-  color: var(--tabi-color-info);
+  color: var(--tabi-wayfinding);
+  text-underline-offset: 0.18em;
 }
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible {
   outline: 3px solid var(--tabi-color-focus);
   outline-offset: 3px;
 }
+
 button,
 input {
   font: inherit;
 }
+
 button {
-  border: 1px solid var(--tabi-color-brand);
-  border-radius: var(--tabi-radius-small);
-  background: var(--tabi-color-brand);
+  min-height: 44px;
+  padding: var(--tabi-space-2) var(--tabi-space-4);
+  border: 1px solid var(--tabi-signal);
+  border-radius: 999px;
+  background: var(--tabi-signal);
   color: var(--tabi-color-brand-on);
   cursor: pointer;
-  padding: var(--tabi-space-2) var(--tabi-space-3);
+  font-size: 0.875rem;
+  font-weight: var(--tabi-font-weight-bold);
+  letter-spacing: 0.035em;
+  transition:
+    background-color var(--tabi-motion-fast) var(--tabi-motion-easing-standard),
+    transform var(--tabi-motion-fast) var(--tabi-motion-easing-standard);
 }
+
+button:hover {
+  background: var(--tabi-color-brand-strong);
+  transform: translateY(-1px);
+}
+
 input {
-  border: 1px solid var(--tabi-color-border);
-  border-radius: var(--tabi-radius-small);
   display: block;
-  min-height: 44px;
-  padding: var(--tabi-space-2);
   width: 100%;
+  min-height: 44px;
+  padding: var(--tabi-space-2) var(--tabi-space-3);
+  border: 1px solid var(--tabi-track);
+  border-radius: 0;
 }
+
 .skip-link {
-  background: var(--tabi-color-text);
-  color: var(--tabi-color-brand-on);
+  position: fixed;
+  z-index: 10;
+  top: -100px;
   left: var(--tabi-space-2);
   padding: var(--tabi-space-2);
-  position: fixed;
-  top: -100px;
-  z-index: 10;
+  background: var(--tabi-color-text);
+  color: var(--tabi-color-brand-on);
 }
+
 .skip-link:focus {
   top: var(--tabi-space-2);
 }
+
 .topbar {
-  align-items: center;
-  background: var(--tabi-color-surface);
-  border-bottom: 1px solid var(--tabi-color-border);
+  position: sticky;
+  z-index: 1;
+  top: 0;
   display: flex;
+  align-items: center;
   gap: var(--tabi-space-3);
   min-height: 56px;
   padding: var(--tabi-space-2) var(--tabi-space-3);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  border-bottom: 3px solid var(--tabi-track);
+  background: var(--tabi-paper);
 }
+
 .topbar nav {
   display: flex;
   flex: 1;
-  justify-content: space-between;
+  gap: var(--tabi-space-3);
+  justify-content: flex-end;
+  overflow-x: auto;
 }
+
+.topbar nav a {
+  color: var(--tabi-track);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .brand {
-  color: var(--tabi-color-brand);
-  font-size: var(--tabi-font-size-title);
-  font-weight: var(--tabi-font-weight-bold);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--tabi-track);
+  font-family: var(--tabi-display);
+  font-size: 1.5rem;
+  font-stretch: condensed;
+  font-weight: 800;
+  letter-spacing: -0.06em;
   text-decoration: none;
 }
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 50%;
+  background: var(--tabi-signal);
+  color: #fff;
+  font-family: var(--tabi-font-family-mono);
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
 .sidebar {
   display: none;
 }
 main {
   min-width: 0;
 }
+
 .page {
+  max-width: 1060px;
   margin: 0 auto;
-  max-width: 900px;
-  padding: var(--tabi-space-5) var(--tabi-space-4);
+  padding: clamp(2rem, 5vw, 5rem) clamp(1.25rem, 5vw, 4.5rem);
 }
+
 .page h1 {
-  font-size: var(--tabi-font-size-heading);
-  line-height: var(--tabi-line-height-compact);
-  margin-top: 0;
+  max-width: 10ch;
+  margin: 0 0 var(--tabi-space-4);
+  color: var(--tabi-track);
+  font-family: var(--tabi-display);
+  font-size: clamp(2.65rem, 6vw, 5.5rem);
+  font-stretch: condensed;
+  font-weight: 800;
+  letter-spacing: -0.065em;
+  line-height: 0.88;
 }
+
 .page h2 {
-  font-size: var(--tabi-font-size-title);
-  margin-top: var(--tabi-space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--tabi-space-2);
+  margin-top: clamp(2.5rem, 7vw, 5.25rem);
+  color: var(--tabi-evergreen);
+  font-family: var(--tabi-display);
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
 }
+
+.page h2::after {
+  width: 100%;
+  max-width: 7rem;
+  height: 2px;
+  background: currentColor;
+  content: "";
+  opacity: 0.3;
+}
+
 .page form {
   display: grid;
   gap: var(--tabi-space-3);
   max-width: 480px;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--tabi-track);
+  background: var(--tabi-paper);
+  box-shadow: 7px 7px 0
+    color-mix(in srgb, var(--tabi-evergreen) 16%, transparent);
 }
-.page form label {
+
+.page form label,
+.page > label {
   display: grid;
   gap: var(--tabi-space-1);
+  font-size: 0.875rem;
+  font-weight: var(--tabi-font-weight-bold);
 }
-.page ul {
-  padding-left: var(--tabi-space-5);
+
+.page > label {
+  max-width: 29rem;
 }
-.page li {
-  margin: var(--tabi-space-3) 0;
+.page > p {
+  max-width: 58ch;
 }
-.vehicle-list span {
+
+.page > h1 + p {
+  max-width: 48ch;
+  margin-bottom: var(--tabi-space-5);
   color: var(--tabi-color-text-muted);
+  font-size: 1.0625rem;
+}
+
+.page > h1 + p::first-letter {
+  color: var(--tabi-signal);
+  font-weight: 800;
+}
+.page > button {
+  margin-bottom: var(--tabi-space-4);
+}
+
+.page ul {
+  max-width: 48rem;
+  padding: 0;
+  list-style: none;
+}
+
+.page li {
+  position: relative;
+  margin: 0;
+  padding: var(--tabi-space-3) 0 var(--tabi-space-3) 1.35rem;
+  border-top: 1px solid var(--tabi-color-border);
+}
+
+.page ul > li::before {
+  position: absolute;
+  top: 1.32rem;
+  left: 0.2rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 3px solid var(--tabi-color-canvas);
+  border-radius: 50%;
+  background: var(--tabi-evergreen);
+  box-shadow: 0 0 0 1px var(--tabi-evergreen);
+  content: "";
+}
+
+.page ul > li:last-child {
+  border-bottom: 1px solid var(--tabi-color-border);
+}
+.page li > a:first-child {
+  color: var(--tabi-track);
+  font-weight: var(--tabi-font-weight-bold);
+}
+.page li p {
+  margin: var(--tabi-space-1) 0;
+}
+.page li small {
+  color: var(--tabi-color-text-muted);
+}
+
+.vehicle-list span {
   display: block;
+  color: var(--tabi-color-text-muted);
   font-size: var(--tabi-font-size-caption);
 }
+
 .vehicle-select {
-  background: transparent;
+  min-height: 0;
+  padding: 0 0 0.1rem;
   border: 0;
   border-radius: 0;
-  color: var(--tabi-color-info);
-  padding: 0;
+  background: transparent;
+  color: var(--tabi-track);
   text-align: left;
   text-decoration: underline;
 }
+
+.vehicle-select:hover {
+  background: transparent;
+  color: var(--tabi-wayfinding);
+  transform: none;
+}
+
 .vehicle-map {
   margin-bottom: var(--tabi-space-4);
+  overflow: hidden;
+  border: 1px solid var(--tabi-track);
+  box-shadow: 8px 8px 0
+    color-mix(in srgb, var(--tabi-wayfinding) 14%, transparent);
 }
+
 .vehicle-map-canvas {
-  height: min(52vh, 440px);
-  min-height: 280px;
   width: 100%;
+  min-height: 280px;
+  height: min(52vh, 440px);
 }
+
 .vehicle-selection {
-  border-left: 4px solid var(--tabi-color-brand);
+  max-width: 43rem;
   margin-top: var(--tabi-space-4);
-  padding-left: var(--tabi-space-3);
+  padding: var(--tabi-space-3) var(--tabi-space-4);
+  border-left: 6px solid var(--tabi-signal);
+  background: var(--tabi-paper);
 }
+
 .vehicle-selection h2 {
   margin-top: 0;
 }
+
 .notice {
-  background: #fff3d6;
-  border-left: 4px solid var(--tabi-color-warning);
   padding: var(--tabi-space-3);
+  border-left: 4px solid var(--tabi-color-warning);
+  background: #fff3d6;
 }
+
 .page button + button {
   margin-left: var(--tabi-space-2);
 }
 
 @media (min-width: 768px) {
   .page {
-    padding: var(--tabi-space-8);
+    padding: clamp(3rem, 7vw, 6rem);
   }
 }
+
 @media (min-width: 1024px) {
   .shell {
     display: grid;
-    grid-template-columns: 230px minmax(0, 1fr);
+    grid-template-columns: 280px minmax(0, 1fr);
     min-height: 100vh;
   }
   .topbar {
     display: none;
   }
   .sidebar {
-    background: var(--tabi-color-surface);
-    border-right: 1px solid var(--tabi-color-border);
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: var(--tabi-space-3);
-    padding: var(--tabi-space-5);
+    gap: var(--tabi-space-2);
+    padding: clamp(1.5rem, 3vw, 3rem) var(--tabi-space-4);
+    border-right: 3px solid var(--tabi-track);
+    background: var(--tabi-paper);
   }
   .sidebar nav {
+    position: relative;
     display: grid;
-    gap: var(--tabi-space-2);
+    gap: 0;
+    margin-top: var(--tabi-space-6);
+  }
+  .sidebar nav::before {
+    position: absolute;
+    top: 1.3rem;
+    bottom: 1.3rem;
+    left: 0.82rem;
+    width: 2px;
+    background: var(--tabi-track);
+    content: "";
+  }
+  .sidebar nav a {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--tabi-space-3);
+    min-height: 3rem;
+    color: var(--tabi-track);
+    font-size: 0.9375rem;
+    font-weight: var(--tabi-font-weight-bold);
+    text-decoration: none;
+  }
+  .nav-stop {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.68rem;
+    height: 1.68rem;
+    border: 2px solid var(--tabi-track);
+    border-radius: 50%;
+    background: var(--tabi-paper);
+    font-family: var(--tabi-font-family-mono);
+    font-size: 0.6rem;
+    letter-spacing: -0.08em;
   }
   .sidebar a[aria-current="page"],
   .topbar a[aria-current="page"] {
-    color: var(--tabi-color-brand-strong);
+    color: var(--tabi-signal);
     font-weight: var(--tabi-font-weight-bold);
   }
+  .sidebar a[aria-current="page"] .nav-stop {
+    border-color: var(--tabi-signal);
+    background: var(--tabi-signal);
+    color: #fff;
+  }
+  .sidebar-kicker {
+    max-width: 15ch;
+    margin: 0;
+    color: var(--tabi-color-text-muted);
+    font-size: 0.75rem;
+  }
+  .sidebar-utility {
+    display: grid;
+    gap: var(--tabi-space-2);
+    margin-top: auto;
+    padding-top: var(--tabi-space-3);
+    border-top: 1px solid var(--tabi-color-border);
+    font-size: 0.8125rem;
+  }
 }
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

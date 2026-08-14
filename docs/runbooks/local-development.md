@@ -2,14 +2,18 @@
 
 ## Required tools
 
-The Phase 0 baseline pins Node.js `>=20.19.0 <23`, pnpm `10.13.1` through
-Corepack, and Go `1.26.x`. Docker Engine with the Compose plugin is needed for
+The Phase 0 baseline pins Node.js `24.19.0`, pnpm `11.x` through Corepack, and
+Go `1.26.6`. `make prereqs` installs nvm through Homebrew and the selected Node
+release under `.tools/nvm`; JavaScript-related Make targets use that copy and
+the repository `.nvmrc`, independent of the Node.js version on your PATH.
+Docker Engine with the Compose plugin is needed for
 database, service integration, and deployment checks. The exact Expo, React
 Native, Mapbox, PostGIS, Caddy, and restic versions are selected by the
 architecture/version-matrix work package; do not infer them from this runbook.
 
-Run `make doctor` first. It exits non-zero if a required local prerequisite is
-unavailable; it does not claim success for optional tools it cannot verify.
+Run `make prereqs` followed by `make doctor`. The doctor exits non-zero if a
+required local prerequisite is unavailable; it does not claim success for
+optional tools it cannot verify.
 
 ## Prerequisites and routine checks
 
@@ -17,6 +21,9 @@ unavailable; it does not claim success for optional tools it cannot verify.
 make prereqs
 make format-check lint typecheck test
 ```
+
+To refresh all JavaScript, nvm, Go module/tool, Python tool, and pre-commit
+version pins, run `make update-dependencies`, then run the complete test suite.
 
 `make format` writes formatting changes. `make format-check` is the non-mutating
 check used by CI. `make test` runs TypeScript unit tests and `go test ./...`.

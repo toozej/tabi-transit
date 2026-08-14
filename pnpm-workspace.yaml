@@ -1,3 +1,15 @@
 packages:
   - apps/*
   - packages/*
+
+# esbuild's install script selects the platform-specific binary used by Vite and
+# Vitest. Allow that single reviewed dependency to run during locked installs.
+allowBuilds:
+  esbuild: true
+
+# Expo Router 57 resolves react-native-worklets 0.11.x through Reanimated, but
+# expo-modules-core 57.0.10 still declares an obsolete upper peer bound (0.10).
+# Keep the exception package-specific so other peer conflicts remain visible.
+peerDependencyRules:
+  allowedVersions:
+    "expo-modules-core>react-native-worklets": "0.11.x"

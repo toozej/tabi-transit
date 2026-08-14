@@ -61,7 +61,7 @@ update_tools() {
 	local name package module version latest updated=false
 	local temp
 	temp="$(mktemp)"
-	trap 'rm -f "${temp}"' EXIT
+	trap 'rm -f "${temp:-}"' EXIT
 
 	while IFS=$'\t' read -r name package module version || [[ -n "${name}" ]]; do
 		if [[ -z "${name}" || "${name}" == \#* ]]; then
@@ -69,7 +69,7 @@ update_tools() {
 			continue
 		fi
 
-		latest="$(go list -mod=mod -m -f '{{.Version}}' "${module}@latest")"
+		latest="$(GOWORK=off go list -mod=mod -m -f '{{.Version}}' "${module}@latest")"
 		if [[ -z "${latest}" ]]; then
 			echo "could not resolve latest version for ${module}" >&2
 			exit 1

@@ -141,7 +141,10 @@ export function VehicleMap({
     map.current = instance;
 
     const selectFeature = (event: mapboxgl.MapLayerMouseEvent) => {
-      const id = event.features?.[0]?.properties?.id;
+      const feature = event.features?.[0] as
+        | { properties?: Record<string, unknown> }
+        | undefined;
+      const id = feature?.properties?.id;
       if (typeof id === "string") selectHandler.current(id);
     };
     const pointer = () => {

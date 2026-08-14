@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "description": "Tabi transit monorepo",
-  "packageManager": "pnpm@10.13.1",
+  "packageManager": "pnpm@11.21.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c11132ecffada26fad4ea79c485bfddbfd3d5a2a5b05805a77e893de71ec8a6cca3bb1",
   "engines": {
-    "node": ">=20.19.0 <23",
-    "pnpm": ">=10.13.1 <11"
+    "node": ">=24.19.0 <25",
+    "pnpm": ">=11 <12"
   },
   "scripts": {
     "format": "prettier --write .",
@@ -17,15 +17,15 @@
     "build": "corepack pnpm --recursive --if-present run build"
   },
   "devDependencies": {
-    "@eslint/js": "9.31.0",
-    "@redocly/cli": "2.40.0",
-    "@types/node": "22.16.5",
-    "eslint": "9.31.0",
+    "@eslint/js": "10.0.1",
+    "@redocly/cli": "2.46.1",
+    "@types/node": "24.13.3",
+    "eslint": "10.8.1",
     "eslint-config-prettier": "10.1.8",
-    "prettier": "3.6.2",
     "openapi-typescript": "7.13.0",
-    "typescript": "5.8.3",
-    "typescript-eslint": "8.37.0",
-    "vitest": "3.2.4"
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.10"
   }
 }

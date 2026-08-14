@@ -13,6 +13,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: "./assets/images/tabi-app-icon.png",
   orientation: "portrait",
   userInterfaceStyle: "automatic",
+  splash: {
+    image: "./assets/images/tabi-app-icon.png",
+    resizeMode: "contain",
+    backgroundColor: "#F5F3EE",
+  },
   newArchEnabled: true,
   ios: {
     bundleIdentifier: "app.tabi.transit",

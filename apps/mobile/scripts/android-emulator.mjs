@@ -207,6 +207,31 @@ function installedAvds(avdmanager) {
   });
 }
 
+function existingAvdPath(avdName, avdmanager) {
+  // Prefer the local AVD directory. avdmanager can emit errors while reading
+  // obsolete system-image devices.xml files, even when the requested AVD is
+  // already valid and ready to run.
+  const defaultPath = path.join(avdHome, `${avdName}.avd`);
+  if (existsSync(path.join(defaultPath, "config.ini"))) {
+    return defaultPath;
+  }
+
+  // AVDs can be stored outside ANDROID_AVD_HOME. In that case, use the
+  // companion metadata file before falling back to avdmanager's list output.
+  const metadataPath = path.join(avdHome, `${avdName}.ini`);
+  if (existsSync(metadataPath)) {
+    const configuredPath = readFileSync(metadataPath, "utf8")
+      .split(/\r?\n/)
+      .find((line) => line.startsWith("path="))
+      ?.slice("path=".length);
+    if (configuredPath && existsSync(path.join(configuredPath, "config.ini"))) {
+      return configuredPath;
+    }
+  }
+
+  return installedAvds(avdmanager).find(({ name }) => name === avdName)?.path;
+}
+
 function updateAvdConfiguration(configFile, target) {
   const values = new Map();
   for (const line of readFileSync(configFile, "utf8").split("\n")) {
@@ -245,10 +270,7 @@ function ensureEmulator(targetId) {
   const target = targetFor(targetId);
   const avdmanager = sdkTool("avdmanager");
   const environment = androidEnvironment();
-  const existing = installedAvds(avdmanager).find(
-    ({ name }) => name === target.avdName,
-  );
-  let avdPath = existing?.path;
+  let avdPath = existingAvdPath(target.avdName, avdmanager);
 
   if (!avdPath) {
     const baseDevice = baseDeviceFor(target, avdmanager);

@@ -1,5 +1,13 @@
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import {
   notificationRepository,
@@ -7,24 +15,35 @@ import {
 } from "@/data/api/notificationRepository";
 import type { NotificationSubscriptionDraft } from "@/domain/notifications";
 import { useNotificationStore } from "@/state/notificationStore";
+import { tabi, tabiCommonStyles } from "@/ui/tabi";
 
-const defaultAlertDraft: NotificationSubscriptionDraft = {
-  type: "service_alert",
-  scope: { routeId: "trimet:route:20", source: "fixture-alerts" },
-  quietHours: {
-    startsAt: "22:00",
-    endsAt: "07:00",
-    timeZone: "America/Los_Angeles",
-  },
-  expiresAt: "2026-08-01T00:00:00Z",
-};
+function futureIso(days: number) {
+  const value = new Date();
+  value.setDate(value.getDate() + days);
+  return value.toISOString();
+}
 
-const defaultDepartureDraft: NotificationSubscriptionDraft = {
-  type: "departure_reminder",
-  scope: { stopId: "trimet:stop:101" },
-  leadMinutes: 10,
-  expiresAt: "2026-07-24T00:00:00Z",
-};
+function serviceAlertDraft(): NotificationSubscriptionDraft {
+  return {
+    type: "service_alert",
+    scope: { routeId: "trimet:route:20", source: "fixture-alerts" },
+    quietHours: {
+      startsAt: "22:00",
+      endsAt: "07:00",
+      timeZone: "America/Los_Angeles",
+    },
+    expiresAt: futureIso(30),
+  };
+}
+
+function departureDraft(): NotificationSubscriptionDraft {
+  return {
+    type: "departure_reminder",
+    scope: { stopId: "trimet:stop:101" },
+    leadMinutes: 10,
+    expiresAt: futureIso(1),
+  };
+}
 
 function describeScope(scope: NotificationSubscriptionDraft["scope"]): string {
   return (
@@ -32,8 +51,16 @@ function describeScope(scope: NotificationSubscriptionDraft["scope"]): string {
     scope.stopId ??
     scope.mode ??
     scope.source ??
-    "scope unavailable"
+    "Scope unavailable"
   );
+}
+
+function formatExpiry(value?: string) {
+  if (!value) return "No expiry";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 export function NotificationSettingsView() {
@@ -59,7 +86,7 @@ export function NotificationSettingsView() {
       const subscription = await notificationRepository.create(draft);
       addSubscription(subscription);
       setStatus(
-        "Fixture subscription saved locally. Push delivery remains disabled.",
+        "Subscription saved on this device. Push delivery remains disabled in this fixture build.",
       );
     } catch (error) {
       setStatus(
@@ -70,107 +97,390 @@ export function NotificationSettingsView() {
     }
   }
 
-  async function remove(id: string) {
-    await notificationRepository.remove(id);
-    removeSubscription(id);
-    setStatus("Fixture subscription deleted locally.");
+  function confirmRemove(id: string, label: string) {
+    Alert.alert(
+      "Delete notification?",
+      `${label} will be removed from this device.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void notificationRepository.remove(id).then(() => {
+              removeSubscription(id);
+              setStatus("Subscription deleted from this device.");
+            });
+          },
+        },
+      ],
+    );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text accessibilityRole="header" style={styles.heading}>
-        Notifications
-      </Text>
-      <Text>
-        Tabi asks for notification permission only after you choose a delivery
-        option. This fixture build does not request permission, register a push
-        token, or deliver notifications.
-      </Text>
-      <Text accessibilityLiveRegion="polite">{status}</Text>
-
-      <View style={styles.group}>
-        <Text accessibilityRole="header" style={styles.subheading}>
-          Add a fixture subscription
+    <ScrollView
+      contentContainerStyle={styles.page}
+      style={tabiCommonStyles.screen}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.headingBlock}>
+        <Text style={tabiCommonStyles.eyebrow}>STAY AHEAD</Text>
+        <Text accessibilityRole="header" style={tabiCommonStyles.title}>
+          Notifications
         </Text>
-        <Text>
-          Quiet hours use America/Los_Angeles from 22:00 to 07:00. The alert
-          watch expires on August 1, 2026.
+        <Text style={tabiCommonStyles.subtitle}>
+          Choose useful moments first. Tabi only asks for system permission when
+          delivery is available and you turn something on.
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add fixture service alert subscription for route 20"
-          onPress={() => void add(defaultAlertDraft)}
-          style={styles.button}
-        >
-          <Text>Add service alert for Route 20</Text>
-        </Pressable>
-        <Text>
-          The departure reminder expires on July 24, 2026 and uses a 10 minute
-          lead time.
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add fixture departure reminder for stop 101"
-          onPress={() => void add(defaultDepartureDraft)}
-          style={styles.button}
-        >
-          <Text>Add departure reminder for Stop 101</Text>
-        </Pressable>
       </View>
 
-      <View style={styles.group}>
-        <Text accessibilityRole="header" style={styles.subheading}>
-          Your subscriptions
-        </Text>
-        {subscriptions.length === 0 ? (
-          <Text>
-            No notification subscriptions are saved in this fixture session.
+      <View style={styles.statusCard}>
+        <View style={styles.statusIcon}>
+          <MaterialCommunityIcons
+            name="bell-off-outline"
+            color={tabi.color.warning}
+            size={23}
+          />
+        </View>
+        <View style={styles.statusCopy}>
+          <Text style={styles.statusTitle}>Push delivery is off</Text>
+          <Text accessibilityLiveRegion="polite" style={styles.statusText}>
+            {status}
           </Text>
-        ) : (
-          subscriptions.map((subscription) => (
-            <View key={subscription.id} style={styles.subscription}>
-              <Text accessibilityRole="header">
-                {subscription.type === "service_alert"
-                  ? "Service alert"
-                  : "Departure reminder"}
-              </Text>
-              <Text>{`Scope: ${describeScope(subscription.scope)}`}</Text>
-              {subscription.leadMinutes !== undefined && (
-                <Text>{`Lead time: ${subscription.leadMinutes} minutes`}</Text>
-              )}
-              {subscription.quietHours && (
-                <Text>{`Quiet hours: ${subscription.quietHours.startsAt}–${subscription.quietHours.endsAt} (${subscription.quietHours.timeZone})`}</Text>
-              )}
-              {subscription.expiresAt && (
-                <Text>{`Expires: ${subscription.expiresAt}`}</Text>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${subscription.type} subscription`}
-                onPress={() => void remove(subscription.id)}
-                style={styles.deleteButton}
-              >
-                <Text>Delete subscription</Text>
-              </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text accessibilityRole="header" style={tabiCommonStyles.sectionTitle}>
+          Try notification choices
+        </Text>
+        <Text style={tabiCommonStyles.secondary}>
+          These fixture choices exercise the same local controls on iOS and
+          Android.
+        </Text>
+
+        <View style={styles.optionCard}>
+          <View style={styles.optionTopline}>
+            <View style={styles.optionIcon}>
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                color={tabi.color.accent}
+                size={22}
+              />
             </View>
-          ))
+            <View style={styles.optionCopy}>
+              <Text style={styles.optionTitle}>Route 20 service alerts</Text>
+              <Text style={styles.optionDescription}>
+                Quiet from 10 PM to 7 AM · Expires in 30 days
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add fixture service alert subscription for route 20"
+            onPress={() => void add(serviceAlertDraft())}
+            style={({ pressed }) => [
+              styles.addButton,
+              pressed && styles.addButtonPressed,
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="plus"
+              color={tabi.color.white}
+              size={19}
+            />
+            <Text style={styles.addButtonText}>Add service alert</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.optionCard}>
+          <View style={styles.optionTopline}>
+            <View style={styles.optionIcon}>
+              <MaterialCommunityIcons
+                name="clock-alert-outline"
+                color={tabi.color.accent}
+                size={22}
+              />
+            </View>
+            <View style={styles.optionCopy}>
+              <Text style={styles.optionTitle}>Stop 101 departure</Text>
+              <Text style={styles.optionDescription}>
+                10-minute reminder · Expires tomorrow
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add fixture departure reminder for stop 101"
+            onPress={() => void add(departureDraft())}
+            style={({ pressed }) => [
+              styles.addButton,
+              pressed && styles.addButtonPressed,
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="plus"
+              color={tabi.color.white}
+              size={19}
+            />
+            <Text style={styles.addButtonText}>Add reminder</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionTopline}>
+          <Text
+            accessibilityRole="header"
+            style={tabiCommonStyles.sectionTitle}
+          >
+            Your notifications
+          </Text>
+          <Text style={styles.count}>{subscriptions.length} ACTIVE</Text>
+        </View>
+
+        {subscriptions.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <MaterialCommunityIcons
+              name="bell-plus-outline"
+              color={tabi.color.accent}
+              size={29}
+            />
+            <Text style={styles.emptyTitle}>Nothing configured yet</Text>
+            <Text style={styles.emptyText}>
+              Add one of the choices above to preview notification controls.
+            </Text>
+          </View>
+        ) : (
+          subscriptions.map((subscription) => {
+            const label =
+              subscription.type === "service_alert"
+                ? "Service alert"
+                : "Departure reminder";
+            return (
+              <View key={subscription.id} style={styles.subscription}>
+                <View style={styles.subscriptionHeading}>
+                  <View style={styles.subscriptionIcon}>
+                    <MaterialCommunityIcons
+                      name={
+                        subscription.type === "service_alert"
+                          ? "alert-circle-outline"
+                          : "clock-outline"
+                      }
+                      color={tabi.color.accent}
+                      size={21}
+                    />
+                  </View>
+                  <View style={styles.subscriptionCopy}>
+                    <Text
+                      accessibilityRole="header"
+                      style={styles.subscriptionTitle}
+                    >
+                      {label}
+                    </Text>
+                    <Text style={styles.subscriptionScope}>
+                      {describeScope(subscription.scope)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.metadata}>
+                  {subscription.leadMinutes !== undefined && (
+                    <Text
+                      style={styles.metaText}
+                    >{`${subscription.leadMinutes} minute lead time`}</Text>
+                  )}
+                  {subscription.quietHours && (
+                    <Text
+                      style={styles.metaText}
+                    >{`Quiet ${subscription.quietHours.startsAt}–${subscription.quietHours.endsAt}`}</Text>
+                  )}
+                  <Text
+                    style={styles.metaText}
+                  >{`Expires ${formatExpiry(subscription.expiresAt)}`}</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${subscription.type} subscription`}
+                  onPress={() => confirmRemove(subscription.id, label)}
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    pressed && tabiCommonStyles.pressed,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="trash-can-outline"
+                    color={tabi.color.danger}
+                    size={18}
+                  />
+                  <Text style={styles.deleteText}>Delete</Text>
+                </Pressable>
+              </View>
+            );
+          })
         )}
       </View>
-      <Text>
-        Background work is limited to cache and static-data maintenance plus
-        subscription reconciliation. It does not monitor location or poll
-        vehicles continuously.
-      </Text>
+
+      <View style={styles.privacyNote}>
+        <MaterialCommunityIcons
+          name="shield-check-outline"
+          color={tabi.color.success}
+          size={20}
+        />
+        <Text style={styles.privacyText}>
+          Background work only maintains cached transit data and reconciles your
+          subscriptions. Tabi does not continuously monitor location or
+          vehicles.
+        </Text>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { gap: 12, padding: 20 },
-  heading: { fontSize: 24, fontWeight: "600" },
-  subheading: { fontSize: 19, fontWeight: "600" },
-  group: { gap: 8 },
-  button: { borderWidth: 1, borderColor: "#444", padding: 10 },
-  deleteButton: { borderWidth: 1, borderColor: "#991b1b", padding: 10 },
-  subscription: { borderWidth: 1, borderColor: "#777", gap: 5, padding: 12 },
+  page: {
+    ...tabiCommonStyles.page,
+    alignSelf: "center",
+    maxWidth: 680,
+    width: "100%",
+  },
+  headingBlock: { gap: 7, paddingTop: 6 },
+  statusCard: {
+    alignItems: "flex-start",
+    backgroundColor: tabi.color.warningSoft,
+    borderRadius: tabi.radius.medium,
+    flexDirection: "row",
+    gap: 12,
+    padding: 15,
+  },
+  statusIcon: {
+    alignItems: "center",
+    backgroundColor: tabi.color.surface,
+    borderRadius: tabi.radius.pill,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  statusCopy: { flex: 1, gap: 4 },
+  statusTitle: { color: tabi.color.ink, fontSize: 15, fontWeight: "800" },
+  statusText: { color: tabi.color.mutedInk, fontSize: 13, lineHeight: 18 },
+  section: { gap: 11 },
+  optionCard: {
+    backgroundColor: tabi.color.surface,
+    borderColor: tabi.color.border,
+    borderRadius: tabi.radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 14,
+    padding: 15,
+  },
+  optionTopline: { alignItems: "center", flexDirection: "row", gap: 11 },
+  optionIcon: {
+    alignItems: "center",
+    backgroundColor: tabi.color.accentSoft,
+    borderRadius: tabi.radius.small,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  optionCopy: { flex: 1, gap: 3 },
+  optionTitle: { color: tabi.color.ink, fontSize: 16, fontWeight: "700" },
+  optionDescription: {
+    color: tabi.color.mutedInk,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  addButton: {
+    alignItems: "center",
+    backgroundColor: tabi.color.accent,
+    borderRadius: tabi.radius.small,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    minHeight: tabi.touchTarget,
+  },
+  addButtonPressed: { backgroundColor: tabi.color.accentPressed },
+  addButtonText: { color: tabi.color.white, fontSize: 15, fontWeight: "700" },
+  sectionTopline: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  count: {
+    color: tabi.color.mutedInk,
+    fontFamily: tabi.type.utility,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+  emptyCard: {
+    alignItems: "center",
+    backgroundColor: tabi.color.surface,
+    borderColor: tabi.color.border,
+    borderRadius: tabi.radius.medium,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    padding: 22,
+  },
+  emptyTitle: {
+    color: tabi.color.ink,
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 9,
+  },
+  emptyText: {
+    color: tabi.color.mutedInk,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  subscription: {
+    backgroundColor: tabi.color.surface,
+    borderColor: tabi.color.border,
+    borderRadius: tabi.radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 11,
+    padding: 15,
+  },
+  subscriptionHeading: { alignItems: "center", flexDirection: "row", gap: 11 },
+  subscriptionIcon: {
+    alignItems: "center",
+    backgroundColor: tabi.color.accentSoft,
+    borderRadius: tabi.radius.pill,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  subscriptionCopy: { flex: 1, gap: 2 },
+  subscriptionTitle: { color: tabi.color.ink, fontSize: 16, fontWeight: "700" },
+  subscriptionScope: { color: tabi.color.mutedInk, fontSize: 12 },
+  metadata: {
+    backgroundColor: tabi.color.surfaceMuted,
+    borderRadius: tabi.radius.small,
+    gap: 3,
+    padding: 10,
+  },
+  metaText: { color: tabi.color.mutedInk, fontSize: 12, lineHeight: 17 },
+  deleteButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    minHeight: tabi.touchTarget,
+    paddingRight: 14,
+  },
+  deleteText: { color: tabi.color.danger, fontSize: 14, fontWeight: "700" },
+  privacyNote: {
+    alignItems: "flex-start",
+    borderTopColor: tabi.color.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 16,
+  },
+  privacyText: {
+    color: tabi.color.mutedInk,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
 });
