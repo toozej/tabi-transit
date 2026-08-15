@@ -48,6 +48,10 @@ jobs:
         if: steps.config.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up Homebrew for repository-managed nvm
+        if: steps.config.outputs.enabled == 'true'
+        uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
+
       - name: Set up Node
         if: steps.config.outputs.enabled == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
