@@ -59,10 +59,12 @@
       "hardware": {
         "hw.device.manufacturer": "Sony",
         "hw.device.name": "sony_xperia_1_ii",
-        "hw.lcd.width": "1644",
-        "hw.lcd.height": "3840",
-        "hw.lcd.density": "643",
-        "hw.ramSize": "4096"
+        "hw.lcd.width": "1080",
+        "hw.lcd.height": "2520",
+        "hw.lcd.density": "420",
+        "hw.ramSize": "4096",
+        "hw.gpu.mode": "software",
+        "disk.dataPartition.size": "4G"
       }
     }
   ]

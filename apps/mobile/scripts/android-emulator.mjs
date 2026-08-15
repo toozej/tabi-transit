@@ -237,7 +237,10 @@ function updateAvdConfiguration(configFile, target) {
   for (const line of readFileSync(configFile, "utf8").split("\n")) {
     const separator = line.indexOf("=");
     if (separator > 0) {
-      values.set(line.slice(0, separator), line.slice(separator + 1));
+      values.set(
+        line.slice(0, separator).trim(),
+        line.slice(separator + 1).trim(),
+      );
     }
   }
 
@@ -303,6 +306,10 @@ function ensureEmulator(targetId) {
     fail(`AVD configuration is missing: ${avdConfig}`);
   }
   updateAvdConfiguration(avdConfig, target);
+  const hardwareQemuConfig = path.join(avdPath, "hardware-qemu.ini");
+  if (existsSync(hardwareQemuConfig)) {
+    updateAvdConfiguration(hardwareQemuConfig, target);
+  }
   return target;
 }
 
