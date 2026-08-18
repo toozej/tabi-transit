@@ -15,8 +15,6 @@ updates:
     directories:
       - /
       - /spikes/transit-data
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 7
     patterns:
@@ -25,8 +23,6 @@ updates:
 
   - package-ecosystem: npm
     directory: /
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 7
     patterns:
@@ -35,8 +31,6 @@ updates:
 
   - package-ecosystem: pip
     directory: /tools
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 7
     patterns:
@@ -45,8 +39,6 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 7
     patterns:
@@ -55,8 +47,6 @@ updates:
 
   - package-ecosystem: docker
     directory: /
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 7
     patterns:
@@ -65,8 +55,14 @@ updates:
 
   - package-ecosystem: docker-compose
     directory: /deployment
-    schedule:
-      interval: weekly
+    cooldown:
+      default-days: 7
+    patterns:
+      - "*"
+    multi-ecosystem-group: combined
+
+  - package-ecosystem: pre-commit
+    directory: /
     cooldown:
       default-days: 7
     patterns:
