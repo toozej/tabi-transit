@@ -3,7 +3,7 @@
 ## Required tools
 
 The Phase 0 baseline pins Node.js `24.19.0`, pnpm `11.x` through Corepack, and
-Go `1.26.6`. `make prereqs` installs nvm through Homebrew and the selected Node
+Go `1.27.0`. `make prereqs` installs nvm through Homebrew and the selected Node
 release under `.tools/nvm`; JavaScript-related Make targets use that copy and
 the repository `.nvmrc`, independent of the Node.js version on your PATH.
 Docker Engine with the Compose plugin is needed for

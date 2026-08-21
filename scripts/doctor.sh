@@ -56,8 +56,8 @@ fi
 if command -v go >/dev/null 2>&1; then
   go_version="$(go env GOVERSION)"
   case "$go_version" in
-    go1.26.*) printf 'ok: Go version %s\n' "$go_version" ;;
-    *) printf 'unsupported: Go version %s; require Go 1.26.x\n' "$go_version" >&2; failures=$((failures + 1)) ;;
+    go1.27.*) printf 'ok: Go version %s\n' "$go_version" ;;
+    *) printf 'unsupported: Go version %s; require Go 1.27.x\n' "$go_version" >&2; failures=$((failures + 1)) ;;
   esac
 fi
 
