@@ -107,7 +107,7 @@ format: node-check ## Format repository source files
 	@$(NODE_RUN) corepack pnpm format
 
 format-check: node-check ## Verify repository source formatting
-	@$(NODE_RUN) corepack pnpm format:check
+	@CI=true $(NODE_RUN) corepack pnpm format:check
 
 lint: node-check ## Run repository linters
 	@$(NODE_RUN) corepack pnpm lint
