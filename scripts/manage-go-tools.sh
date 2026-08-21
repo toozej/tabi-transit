@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST="${ROOT}/tools/go-tools.tsv"
+MANIFEST="${GO_TOOL_MANIFEST:-${ROOT}/tools/go-tools.tsv}"
 TOOLS_BIN="${TOOLS_BIN:-${ROOT}/.tools/bin}"
 
 usage() {

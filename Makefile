@@ -8,9 +8,9 @@ MAKEFLAGS += --no-builtin-rules
 
 GO_CACHE_DIR := $(CURDIR)/.cache/go-build
 
-# Go-based build, development, and test tools are installed independently as
-# package@version into a repository-local bin directory. Their module graphs do
-# not affect the application module or one another.
+# Go tools and release binaries are installed independently into a
+# repository-local bin directory. Go tool module graphs do not affect the
+# application module or one another.
 TOOLS_DIR := $(CURDIR)/.tools
 TOOLS_BIN := $(TOOLS_DIR)/bin
 NVM_DIR := $(TOOLS_DIR)/nvm
@@ -18,17 +18,30 @@ NODE_RUN := $(CURDIR)/scripts/with-node.sh
 PYTHON_TOOLS_VENV := $(TOOLS_DIR)/python
 GO_TOOLS := $(CURDIR)/scripts/manage-go-tools.sh
 GO_TOOL_MANIFEST ?= $(CURDIR)/tools/go-tools.tsv
+BINARY_TOOLS := $(CURDIR)/scripts/manage-binary-tools.sh
+BINARY_TOOL_MANIFEST ?= $(CURDIR)/tools/binary-tools.tsv
 PYTHON_TOOL_REQUIREMENTS := $(CURDIR)/tools/requirements.txt
+# A Go directive can omit its patch component, but toolchain names cannot.
+GO_TOOLCHAIN := $(shell awk '$$1 == "go" { count = split($$2, version, "."); printf "go%s%s\n", $$2, count == 2 ? ".0" : ""; exit }' go.mod)
 # Use the character code for "#" because an unescaped # starts a Make comment.
 GO_TOOL_NAMES := $(shell if test -f "$(GO_TOOL_MANIFEST)"; then awk -F '\t' 'NF && substr($$1, 1, 1) != sprintf("%c", 35) { print $$1 }' "$(GO_TOOL_MANIFEST)"; fi)
 GO_TOOL_INSTALL_TARGETS := $(addsuffix -install,$(GO_TOOL_NAMES))
-export PATH := $(TOOLS_BIN):$(PYTHON_TOOLS_VENV)/bin:$(PATH)
+BINARY_TOOL_NAMES := $(shell if test -f "$(BINARY_TOOL_MANIFEST)"; then awk -F '\t' 'NF && substr($$1, 1, 1) != sprintf("%c", 35) { print $$1 }' "$(BINARY_TOOL_MANIFEST)"; fi)
+BINARY_TOOL_INSTALL_TARGETS := $(addsuffix -install,$(BINARY_TOOL_NAMES))
+# Do not allow an inherited PATH or GOTOOLCHAIN to bypass the repository's
+# pinned binaries or declared Go version. +auto permits an explicit module
+# requirement for a newer Go release.
+override export PATH := $(TOOLS_BIN):$(PYTHON_TOOLS_VENV)/bin:$(PATH)
+override export GOTOOLCHAIN := $(GO_TOOLCHAIN)+auto
 export PRE_COMMIT_HOME := $(CURDIR)/.cache/pre-commit
-export SEMGREP_SETTINGS_FILE := $(CURDIR)/.cache/semgrep/settings.yml
+# OpenGrep uses Semgrep-compatible variable names. Keep its log and settings
+# in the repository cache instead of creating user-home artifacts.
+export SEMGREP_LOG_FILE := $(CURDIR)/.cache/opengrep/semgrep.log
+export SEMGREP_SETTINGS_FILE := $(CURDIR)/.cache/opengrep/settings.yml
 export XDG_CACHE_HOME := $(CURDIR)/.cache
 
-.PHONY: all clean help prereqs prereqs-web prereqs-mobile prereqs-ios-simulators prereqs-android-simulators bootstrap bootstrap-ios-simulators format format-check lint typecheck test test-unit test-js test-web test-web-preview test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-web ios-simulators ios-iphone-13-mini ios-iphone-air android android-simulators android-motorola-razr-2024 android-pixel-10-pro android-sony-xperia-1-ii stop-ios-simulators stop-android-simulators stop-simulators dev-poller build doctor nvm-install nvm-update node-check update-dependencies tools-install go-tools-install python-tools-install pre-commit-tools-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
-.PHONY: $(GO_TOOL_INSTALL_TARGETS)
+.PHONY: all clean help prereqs prereqs-web prereqs-mobile prereqs-ios-simulators prereqs-android-simulators bootstrap bootstrap-ios-simulators format format-check lint typecheck test test-unit test-js test-web test-web-preview test-go test-integration test-db-migrations test-e2e test-race test-load test-history-benchmark test-vehicle-payload-benchmark test-trimet-live generate generate-check db-up db-migrate dev-api dev-mobile dev-web ios-simulators ios-iphone-13-mini ios-iphone-air android android-simulators android-motorola-razr-2024 android-pixel-10-pro android-sony-xperia-1-ii stop-ios-simulators stop-android-simulators stop-simulators dev-poller build doctor nvm-install nvm-update node-check update-dependencies tools-install go-tools-install binary-tools-install binary-tools-update python-tools-install pre-commit-tools-install pre-commit-install-no-prereqs pre-commit-run pre-commit-run-no-generate pre-commit-update pre-commit licenses
+.PHONY: $(GO_TOOL_INSTALL_TARGETS) $(BINARY_TOOL_INSTALL_TARGETS)
 
 all: pre-commit-run build ## Run repository checks and build all applications
 
@@ -59,7 +72,7 @@ nvm-update: ## Update nvm through Homebrew and retain its repository-local Node 
 node-check: nvm-install ## Check that nvm selects a supported Node.js runtime
 	@$(NODE_RUN) bash -c 'command -v corepack >/dev/null 2>&1 || { echo "Corepack is required by the Node.js version in .nvmrc." >&2; exit 1; }; node_version="$$(node --version)"; node_without_prefix="$${node_version#v}"; node_major="$${node_without_prefix%%.*}"; node_minor_and_patch="$${node_without_prefix#*.}"; node_minor="$${node_minor_and_patch%%.*}"; if [ "$$node_major" -eq 24 ] && [ "$$node_minor" -ge 19 ]; then :; else echo "Unsupported Node.js version $$node_version; require >=24.19.0 and <25 (see .nvmrc)." >&2; exit 1; fi'
 
-update-dependencies: node-check ## Update JavaScript, Go, Python, and pre-commit dependency/toolchain pins
+update-dependencies: node-check ## Update JavaScript, Go, Python, binary-tool, and pre-commit pins
 	@$(MAKE) nvm-update
 	@CI=true $(NODE_RUN) corepack pnpm install --no-frozen-lockfile
 	@CI=true $(NODE_RUN) corepack use pnpm@latest
@@ -71,8 +84,10 @@ update-dependencies: node-check ## Update JavaScript, Go, Python, and pre-commit
 	@GOWORK=off GOTOOLCHAIN=auto go get -u ./...
 	@GOWORK=off GOTOOLCHAIN=auto go mod tidy
 	@cd spikes/transit-data && GOWORK=off GOTOOLCHAIN=auto go get -u ./... && GOWORK=off GOTOOLCHAIN=auto go mod tidy
-	@TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+	@GO_TOOL_MANIFEST="$(GO_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+	@BINARY_TOOL_MANIFEST="$(BINARY_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(BINARY_TOOLS) update
 	@$(MAKE) go-tools-install
+	@$(MAKE) binary-tools-install
 	@scripts/update-python-tools.sh
 	@$(MAKE) python-tools-install
 	@GOWORK=off pre-commit autoupdate
@@ -104,7 +119,7 @@ bootstrap: prereqs
 bootstrap-ios-simulators: prereqs-ios-simulators
 
 format: node-check ## Format repository source files
-	@$(NODE_RUN) corepack pnpm format
+	@CI=true $(NODE_RUN) corepack pnpm format
 
 format-check: node-check ## Verify repository source formatting
 	@CI=true $(NODE_RUN) corepack pnpm format:check
@@ -262,15 +277,23 @@ build: node-check ## Build JavaScript packages and Go binaries
 doctor: ## Check local development prerequisites
 	@scripts/doctor.sh
 
-tools-install: nvm-install go-tools-install python-tools-install ## Install every pinned repository tool
+tools-install: nvm-install go-tools-install binary-tools-install python-tools-install ## Install every pinned repository tool
 
 go-tools-install: $(GO_TOOL_INSTALL_TARGETS) ## Install every Go tool pinned in tools/go-tools.tsv
 
 $(GO_TOOL_INSTALL_TARGETS): %-install:
-	@TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) install $*
+	@GO_TOOL_MANIFEST="$(GO_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) install $*
+
+binary-tools-install: $(BINARY_TOOL_INSTALL_TARGETS) ## Install every binary tool pinned in tools/binary-tools.tsv
+
+$(BINARY_TOOL_INSTALL_TARGETS): %-install:
+	@BINARY_TOOL_MANIFEST="$(BINARY_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(BINARY_TOOLS) install $*
+
+binary-tools-update: ## Update binary tool versions in tools/binary-tools.tsv
+	@BINARY_TOOL_MANIFEST="$(BINARY_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(BINARY_TOOLS) update
 
 python-tools-install: ## Install pinned Python-based repository tools into .tools/python
-	@mkdir -p "$(TOOLS_DIR)" "$(dir $(SEMGREP_SETTINGS_FILE))"
+	@mkdir -p "$(TOOLS_DIR)" "$(dir $(SEMGREP_LOG_FILE))"
 	@if test ! -x "$(PYTHON_TOOLS_VENV)/bin/pre-commit" || \
 		test ! -f "$(PYTHON_TOOLS_VENV)/.requirements.txt" || \
 		! cmp -s "$(PYTHON_TOOL_REQUIREMENTS)" "$(PYTHON_TOOLS_VENV)/.requirements.txt"; then \
@@ -282,7 +305,7 @@ python-tools-install: ## Install pinned Python-based repository tools into .tool
 	fi
 
 pre-commit-tools-install: tools-install ## Install pinned tools and pre-commit hook environments
-	@mkdir -p "$(PRE_COMMIT_HOME)" "$(dir $(SEMGREP_SETTINGS_FILE))"
+	@mkdir -p "$(PRE_COMMIT_HOME)" "$(dir $(SEMGREP_LOG_FILE))"
 	@GOWORK=off pre-commit install-hooks
 
 pre-commit-install: pre-commit-tools-install ## Install the local Git pre-commit hook
@@ -296,6 +319,7 @@ pre-commit-install-no-prereqs:
 		{ head -n 1 "$$hook"; \
 		  echo 'export PATH="$(TOOLS_BIN):$(PYTHON_TOOLS_VENV)/bin:$$PATH"  # tabi-tools-path'; \
 		  echo 'export PRE_COMMIT_HOME="$(PRE_COMMIT_HOME)"'; \
+		  echo 'export SEMGREP_LOG_FILE="$(SEMGREP_LOG_FILE)"'; \
 		  echo 'export SEMGREP_SETTINGS_FILE="$(SEMGREP_SETTINGS_FILE)"'; \
 		  echo 'export XDG_CACHE_HOME="$(XDG_CACHE_HOME)"'; \
 		  tail -n +2 "$$hook"; } >"$$tmp"; \
@@ -312,9 +336,11 @@ pre-commit-run-no-generate: node-check
 	@govulncheck ./...
 	@$(MAKE) licenses
 
-pre-commit-update: python-tools-install prereqs ## Update pinned Go tools and hook revisions, regenerate, and verify
-	@TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+pre-commit-update: python-tools-install prereqs ## Update Go/binary tools and hook revisions, regenerate, and verify
+	@GO_TOOL_MANIFEST="$(GO_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+	@BINARY_TOOL_MANIFEST="$(BINARY_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(BINARY_TOOLS) update
 	@$(MAKE) go-tools-install
+	@$(MAKE) binary-tools-install
 	@GOWORK=off pre-commit autoupdate
 	@$(MAKE) generate
 	@$(MAKE) pre-commit-run-no-generate

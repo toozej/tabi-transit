@@ -22,7 +22,7 @@ make prereqs
 make format-check lint typecheck test
 ```
 
-To refresh all JavaScript, nvm, Go module/tool, Python tool, and pre-commit
+To refresh all JavaScript, nvm, Go module/tool, release-binary tool, Python tool, and pre-commit
 version pins, run `make update-dependencies`, then run the complete test suite.
 
 `make format` writes formatting changes. `make format-check` is the non-mutating

@@ -7,7 +7,7 @@ repos:
     hooks:
       - id: repository-format-check
         name: Check JavaScript, TypeScript, JSON, Markdown, and YAML formatting
-        entry: make format-check
+        entry: make format
         language: system
         pass_filenames: false
         files: '\.(js|jsx|mjs|ts|tsx|json|md|yaml|yml)$'
@@ -120,16 +120,31 @@ repos:
     hooks:
       - id: actionlint
 
-  - repo: https://github.com/semgrep/pre-commit
-    rev: "v1.173.0"
+  # Use the release binary installed by `make binary-tools-install`; this keeps
+  # the scanner version in tools/binary-tools.tsv alongside other repo tools.
+  - repo: local
     hooks:
-      - id: semgrep
+      - id: opengrep
+        name: Scan code with OpenGrep
+        entry: opengrep scan .
+        language: system
+        pass_filenames: false
         args:
           - --config
           - auto
           - --error
           - --skip-unknown-extensions
           - --quiet
+          - --exclude
+          - docs/implementation-plan
+          - --exclude
+          - examples
+          - --exclude
+          - fixtures
+          - --exclude
+          - e2e
+          - --exclude
+          - testdata
           - --exclude-rule
           - go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter
           - --exclude-rule
