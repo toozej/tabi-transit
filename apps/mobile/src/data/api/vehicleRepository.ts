@@ -23,7 +23,10 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly kind:
-      "offline" | "source_unavailable" | "http" | "invalid_response",
+      | "offline"
+      | "source_unavailable"
+      | "http"
+      | "invalid_response",
     readonly retryAfterSeconds?: number,
   ) {
     super(message);

@@ -691,7 +691,11 @@ export interface components {
     };
     /** @enum {string} */
     ArrivalStatus:
-      "scheduled" | "estimated" | "cancelled" | "skipped" | "unknown";
+      | "scheduled"
+      | "estimated"
+      | "cancelled"
+      | "skipped"
+      | "unknown";
     Arrival: {
       /** @description Stable arrival instance ID for this response window. */
       id: string;

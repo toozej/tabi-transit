@@ -49,12 +49,12 @@ function isValidNearbyCoordinate(
 ): coordinate is NearbyCoordinate {
   return Boolean(
     coordinate &&
-    Number.isFinite(coordinate.latitude) &&
-    Number.isFinite(coordinate.longitude) &&
-    coordinate.latitude >= -90 &&
-    coordinate.latitude <= 90 &&
-    coordinate.longitude >= -180 &&
-    coordinate.longitude <= 180,
+      Number.isFinite(coordinate.latitude) &&
+      Number.isFinite(coordinate.longitude) &&
+      coordinate.latitude >= -90 &&
+      coordinate.latitude <= 90 &&
+      coordinate.longitude >= -180 &&
+      coordinate.longitude <= 180,
   );
 }
 

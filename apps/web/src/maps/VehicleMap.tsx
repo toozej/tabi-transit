@@ -24,11 +24,13 @@ function updateSources(
   selectedVehicleId?: string,
 ) {
   const fleet = map.getSource(VEHICLE_SOURCE) as
-    mapboxgl.GeoJSONSource | undefined;
+    | mapboxgl.GeoJSONSource
+    | undefined;
   fleet?.setData(vehicleFeatureCollection(vehicles, selectedVehicleId));
 
   const selected = map.getSource(SELECTED_VEHICLE_SOURCE) as
-    mapboxgl.GeoJSONSource | undefined;
+    | mapboxgl.GeoJSONSource
+    | undefined;
   selected?.setData(
     selectedVehicleFeature(
       vehicles.find((item) => item.id === selectedVehicleId),
@@ -140,7 +142,8 @@ export function VehicleMap({
 
     const selectFeature = (event: mapboxgl.MapLayerMouseEvent) => {
       const feature = event.features?.[0] as
-        { properties?: Record<string, unknown> } | undefined;
+        | { properties?: Record<string, unknown> }
+        | undefined;
       const id = feature?.properties?.id;
       if (typeof id === "string") selectHandler.current(id);
     };
