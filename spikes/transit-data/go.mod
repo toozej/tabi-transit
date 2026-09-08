@@ -1,6 +1,6 @@
 module github.com/toozej/tabi-transit/spikes/transit-data
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs v1.0.0

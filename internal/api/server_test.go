@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -205,16 +206,18 @@ func validRequestIDRuneForTest(r rune) bool {
 }
 
 func TestVehicleHistoryIsBoundedAndPaginated(t *testing.T) {
-	at := time.Date(2026, 7, 28, 16, 30, 2, 0, time.UTC)
+	at := time.Now().UTC().Truncate(time.Second)
+	from := at.Add(-time.Hour)
+	to := at.Add(time.Hour)
 	route := "fixture:route:20"
 	history := &fakeVehicleHistory{items: []persistence.VehicleObservation{{VehicleID: "fixture:vehicle:2901", SourceID: "fixture-rt", SourceVehicleID: "2901", RouteID: &route, Mode: "bus", Coordinate: persistence.Coordinate{Longitude: -122.67, Latitude: 45.52}, ObservedAt: at, FetchedAt: at, Freshness: persistence.FreshnessFresh}}}
 	c := config.Config{API: config.PublicAPI{Version: "0.1.0"}, RateLimit: config.RateLimit{Requests: 20, Window: time.Hour}}
 	h := api.New(application.Service{Catalog: fakeCatalog{}, Vehicles: fakeVehicles{}, History: history}, c)
-	w := request(h, "/v1/vehicles/fixture:vehicle:2901/history?from=2026-07-28T15:00:00Z&to=2026-07-28T17:00:00Z&limit=1")
+	w := request(h, fmt.Sprintf("/v1/vehicles/fixture:vehicle:2901/history?from=%s&to=%s&limit=1", from.Format(time.RFC3339), to.Format(time.RFC3339)))
 	if w.Code != http.StatusOK || w.Header().Get("ETag") == "" || !strings.Contains(w.Body.String(), `"retentionDays":30`) || !strings.Contains(w.Body.String(), `"nextCursor"`) {
 		t.Fatalf("history response = %d %s", w.Code, w.Body.String())
 	}
-	if history.query.VehicleID != "fixture:vehicle:2901" || history.query.Limit != 1 || !history.query.From.Equal(time.Date(2026, 7, 28, 15, 0, 0, 0, time.UTC)) {
+	if history.query.VehicleID != "fixture:vehicle:2901" || history.query.Limit != 1 || !history.query.From.Equal(from) {
 		t.Fatalf("history query = %#v", history.query)
 	}
 	for _, path := range []string{
