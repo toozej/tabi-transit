@@ -20,7 +20,8 @@ require_tool() {
 }
 
 install_tools() {
-	local requested name package _module version
+	local requested name package _module version go_version
+	go_version="$(go env GOVERSION)"
 	for requested in "$@"; do
 		require_tool "${requested}"
 	done
@@ -45,15 +46,15 @@ install_tools() {
 
 		local stamp="${TOOLS_BIN}/.stamps/${name}"
 		if [[ -x "${TOOLS_BIN}/${name}" && -f "${stamp}" \
-			&& "$(cat "${stamp}")" == "${package}@${version}" ]]; then
-			echo "Skipping ${name} (${package}@${version} already installed)"
+			&& "$(cat "${stamp}")" == "${package}@${version} ${go_version}" ]]; then
+			echo "Skipping ${name} (${package}@${version} built with ${go_version})"
 			continue
 		fi
 
-		echo "Installing ${name} (${package}@${version})"
+		echo "Installing ${name} (${package}@${version} with ${go_version})"
 		GOBIN="${TOOLS_BIN}" go install "${package}@${version}"
 		mkdir -p "${TOOLS_BIN}/.stamps"
-		printf '%s@%s\n' "${package}" "${version}" >"${stamp}"
+		printf '%s@%s %s\n' "${package}" "${version}" "${go_version}" >"${stamp}"
 	done <"${MANIFEST}"
 }
 

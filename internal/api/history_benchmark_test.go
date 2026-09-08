@@ -67,14 +67,21 @@ func newVehicleHistoryBenchmarkServer() http.Handler {
 	}, config.Config{RateLimit: config.RateLimit{Requests: 1_000_000, Window: time.Hour}})
 }
 
+func newVehicleHistoryBenchmarkRequest() *http.Request {
+	to := time.Now().UTC().Truncate(time.Second)
+	from := to.Add(-6 * time.Hour)
+	request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/v1/vehicles/trimet-rt:vehicle:2901/history?from=%s&to=%s&limit=500", from.Format(time.RFC3339), to.Format(time.RFC3339)), nil)
+	request.RemoteAddr = "198.51.100.17:1234"
+	return request
+}
+
 // BenchmarkVehicleHistoryMaximumPage measures the local HTTP handler work for
 // a 500-observation page: request parsing, response mapping, JSON encoding,
 // ETag hashing, and writing to an in-memory recorder. It deliberately does not
 // claim a PostgreSQL query-plan, connection-pool, TLS, or mobile-render result.
 func BenchmarkVehicleHistoryMaximumPage(b *testing.B) {
 	h := newVehicleHistoryBenchmarkServer()
-	request := httptest.NewRequest(http.MethodGet, "/v1/vehicles/trimet-rt:vehicle:2901/history?from=2026-07-28T12:00:00Z&to=2026-07-28T18:00:00Z&limit=500", nil)
-	request.RemoteAddr = "198.51.100.17:1234"
+	request := newVehicleHistoryBenchmarkRequest()
 	sample := httptest.NewRecorder()
 	h.ServeHTTP(sample, request)
 	if sample.Code != http.StatusOK {
@@ -100,8 +107,7 @@ func TestVehicleHistoryMaximumPageBenchmarkFixture(t *testing.T) {
 	}
 
 	h := newVehicleHistoryBenchmarkServer()
-	request := httptest.NewRequest(http.MethodGet, "/v1/vehicles/trimet-rt:vehicle:2901/history?from=2026-07-28T12:00:00Z&to=2026-07-28T18:00:00Z&limit=500", nil)
-	request.RemoteAddr = "198.51.100.17:1234"
+	request := newVehicleHistoryBenchmarkRequest()
 	response := httptest.NewRecorder()
 	h.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
