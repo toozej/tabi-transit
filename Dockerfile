@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # The base digests are reviewed with the version matrix. Build metadata is
 # supplied by CI; no credentials or runtime configuration are baked in.
-ARG GO_BUILDER_IMAGE=docker.io/library/golang@sha256:2a0ba12e116687098780d3ce700f9ce3cb340783779646aafbabed748fa6677c
+ARG GO_BUILDER_IMAGE=docker.io/library/golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
 ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35
 
 FROM ${GO_BUILDER_IMAGE} AS build

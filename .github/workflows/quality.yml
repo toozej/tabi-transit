@@ -44,7 +44,7 @@ jobs:
             .cache/pre-commit
           key:
             ${{ runner.os }}-${{ runner.arch }}-repository-tools-${{ hashFiles('Makefile',
-            '.pre-commit-config.yaml', 'tools/go-tools.tsv', 'tools/requirements.txt', 'scripts/manage-go-tools.sh', 'scripts/with-node.sh')
+            '.pre-commit-config.yaml', 'tools/go-tools.tsv', 'tools/binary-tools.tsv', 'tools/requirements.txt', 'scripts/manage-go-tools.sh', 'scripts/manage-binary-tools.sh', 'scripts/with-node.sh')
             }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-repository-tools-

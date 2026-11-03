@@ -70,7 +70,7 @@ jobs:
         if: steps.config.outputs.enabled == 'true'
         run: corepack enable
 
-      - name: Update pinned Go tools and pre-commit hooks
+      - name: Update pinned Go and binary tools and pre-commit hooks
         if: steps.config.outputs.enabled == 'true'
         run: make pre-commit-update
 
@@ -93,12 +93,13 @@ jobs:
           commit-message: "chore(tools): autoupdate"
           title: "chore(tools): autoupdate"
           body: |
-            Automated pinned Go tool and pre-commit hook refresh.
+            Automated pinned Go/binary tool and pre-commit hook refresh.
 
-            `make pre-commit-update` upgraded `tools/go-tools.tsv` and hook
-            revisions, installed those exact versions, regenerated checked-in
-            clients, and validated the result before this PR was opened. Full CI
-            runs again on this PR and gates auto-merge.
+            `make pre-commit-update` upgraded `tools/go-tools.tsv`,
+            `tools/binary-tools.tsv`, and hook revisions; it then installed
+            those exact versions, regenerated checked-in clients, and validated
+            the result before this PR was opened. Full CI runs again on this PR
+            and gates auto-merge.
           branch: chore/tools-autoupdate
           delete-branch: true
           labels: dependencies

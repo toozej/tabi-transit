@@ -3,7 +3,7 @@
 ## Required tools
 
 The Phase 0 baseline pins Node.js `24.19.0`, pnpm `11.x` through Corepack, and
-Go `1.27.0`. `make prereqs` installs nvm through Homebrew and the selected Node
+Go `1.27.3`. `make prereqs` installs nvm through Homebrew and the selected Node
 release under `.tools/nvm`; JavaScript-related Make targets use that copy and
 the repository `.nvmrc`, independent of the Node.js version on your PATH.
 Docker Engine with the Compose plugin is needed for
@@ -22,8 +22,11 @@ make prereqs
 make format-check lint typecheck test
 ```
 
-To refresh all JavaScript, nvm, Go module/tool, Python tool, and pre-commit
+To refresh all JavaScript, nvm, Go module/tool, release-binary tool, Python tool, and pre-commit
 version pins, run `make update-dependencies`, then run the complete test suite.
+
+Run `make update-go-dependencies go-tools-update` to update only Go dependencies
+and tools. Run `make go-tools-install` to install the updated tools.
 
 `make format` writes formatting changes. `make format-check` is the non-mutating
 check used by CI. `make test` runs TypeScript unit tests and `go test ./...`.

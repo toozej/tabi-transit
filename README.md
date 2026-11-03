@@ -15,17 +15,22 @@ Tabi uses official sources through backend adapters. Portland Streetcar coverage
 ## Repository tooling
 
 Install tooling and locked dependencies with `make prereqs`. Go-based build,
-development, and test tools are version-pinned in `tools/go-tools.tsv` and
-installed independently into the ignored `.tools/bin` directory; Python-based
-tooling is pinned in `tools/requirements.txt` and installed into
+development, and test tools are version-pinned in `tools/go-tools.tsv`; release
+binaries are pinned in `tools/binary-tools.tsv`. Both are installed independently
+into the ignored `.tools/bin` directory; Python-based tooling is pinned in
+`tools/requirements.txt` and installed into
 `.tools/python`. These isolated tool environments do not modify the application
 Go module or the system Python installation.
+
+The Go tool manifest can pin one build dependency per tool. The installer builds
+these tools in disposable modules. Go critic uses the pinned `golang.org/x/tools`
+release to read Go 1.27 package data.
 
 Run `make pre-commit` to install the local Git hook and execute the complete
 repository check suite. Later runs can use `make pre-commit-run`, while
 `make pre-commit-install` only installs the hook and its pinned dependencies.
 
-Run `make pre-commit-update` to update pinned Go tools and pre-commit hook
+Run `make pre-commit-update` to update pinned Go/binary tools and pre-commit hook
 revisions, regenerate checked-in clients, and validate the resulting toolchain.
 A scheduled GitHub Actions workflow runs the same target and opens an auto-merge
 PR when updates are available. Configure repository secrets named
