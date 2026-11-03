@@ -72,6 +72,8 @@ nvm-update: ## Update nvm through Homebrew and retain its repository-local Node 
 node-check: nvm-install ## Check that nvm selects a supported Node.js runtime
 	@$(NODE_RUN) bash -c 'command -v corepack >/dev/null 2>&1 || { echo "Corepack is required by the Node.js version in .nvmrc." >&2; exit 1; }; node_version="$$(node --version)"; node_without_prefix="$${node_version#v}"; node_major="$${node_without_prefix%%.*}"; node_minor_and_patch="$${node_without_prefix#*.}"; node_minor="$${node_minor_and_patch%%.*}"; if [ "$$node_major" -eq 24 ] && [ "$$node_minor" -ge 19 ]; then :; else echo "Unsupported Node.js version $$node_version; require >=24.19.0 and <25 (see .nvmrc)." >&2; exit 1; fi'
 
+.PHONY: update-go-dependencies go-tools-update
+
 update-dependencies: node-check ## Update JavaScript, Go, Python, binary-tool, and pre-commit pins
 	@$(MAKE) nvm-update
 	@CI=true $(NODE_RUN) corepack pnpm install --no-frozen-lockfile
@@ -81,10 +83,7 @@ update-dependencies: node-check ## Update JavaScript, Go, Python, binary-tool, a
 	@$(NODE_RUN) corepack pnpm --dir apps/mobile exec expo install --fix
 	@$(NODE_RUN) corepack pnpm --dir apps/mobile add --save-dev @react-native/metro-config@0.86.2 react-dom@19.2.3 react-test-renderer@19.2.3
 	@$(NODE_RUN) corepack pnpm --dir apps/web add react@19.2.3 react-dom@19.2.3
-	@GOWORK=off GOTOOLCHAIN=auto go get -u ./...
-	@GOWORK=off GOTOOLCHAIN=auto go mod tidy
-	@cd spikes/transit-data && GOWORK=off GOTOOLCHAIN=auto go get -u ./... && GOWORK=off GOTOOLCHAIN=auto go mod tidy
-	@GO_TOOL_MANIFEST="$(GO_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+	@$(MAKE) update-go-dependencies go-tools-update
 	@BINARY_TOOL_MANIFEST="$(BINARY_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(BINARY_TOOLS) update
 	@$(MAKE) go-tools-install
 	@$(MAKE) binary-tools-install
@@ -92,6 +91,15 @@ update-dependencies: node-check ## Update JavaScript, Go, Python, binary-tool, a
 	@$(MAKE) python-tools-install
 	@GOWORK=off pre-commit autoupdate
 	@$(MAKE) generate
+
+update-go-dependencies: ## Update and tidy dependencies in all Go modules
+	@GOWORK=off go get -u ./...
+	@GOWORK=off go mod tidy
+	@cd spikes/transit-data && GOWORK=off go get -u ./... && GOWORK=off go mod tidy
+	@go work sync
+
+go-tools-update: ## Update Go tool versions in tools/go-tools.tsv
+	@GO_TOOL_MANIFEST="$(GO_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
 
 prereqs-mobile: node-check ## Install locked mobile workspace dependencies
 	@$(NODE_RUN) corepack pnpm install --frozen-lockfile
@@ -337,7 +345,7 @@ pre-commit-run-no-generate: node-check
 	@$(MAKE) licenses
 
 pre-commit-update: python-tools-install prereqs ## Update Go/binary tools and hook revisions, regenerate, and verify
-	@GO_TOOL_MANIFEST="$(GO_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(GO_TOOLS) update
+	@$(MAKE) go-tools-update
 	@BINARY_TOOL_MANIFEST="$(BINARY_TOOL_MANIFEST)" TOOLS_BIN="$(TOOLS_BIN)" $(BINARY_TOOLS) update
 	@$(MAKE) go-tools-install
 	@$(MAKE) binary-tools-install

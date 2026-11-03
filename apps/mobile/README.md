@@ -32,6 +32,13 @@ corepack pnpm --dir apps/mobile start -- --dev-client
 corepack pnpm --dir apps/mobile prebuild
 ```
 
+## Linux iOS development
+
+xtool 1.22.2 runs as a CLI on Linux, but it cannot build this Expo/React Native
+application. Its build command requires a Swift Package Manager project.
+See the [xtool assessment](../../docs/runbooks/ios-linux-xtool.md) for tested
+commands, observed failures, and the remote macOS build option.
+
 ## Intel Mac iOS simulators
 
 The repository pins Xcode 26.3 in the root `.xcode-version`. This is the newest

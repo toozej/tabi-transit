@@ -22,6 +22,10 @@ into the ignored `.tools/bin` directory; Python-based tooling is pinned in
 `.tools/python`. These isolated tool environments do not modify the application
 Go module or the system Python installation.
 
+The Go tool manifest can pin one build dependency per tool. The installer builds
+these tools in disposable modules. Go critic uses the pinned `golang.org/x/tools`
+release to read Go 1.27 package data.
+
 Run `make pre-commit` to install the local Git hook and execute the complete
 repository check suite. Later runs can use `make pre-commit-run`, while
 `make pre-commit-install` only installs the hook and its pinned dependencies.

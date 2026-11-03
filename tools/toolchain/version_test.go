@@ -5,7 +5,7 @@ import "testing"
 func TestIsSupportedGoVersion(t *testing.T) {
 	t.Parallel()
 
-	if !IsSupportedGoVersion("go1.27.1") {
+	if !IsSupportedGoVersion("go1.27.3") {
 		t.Fatal("expected Go 1.27 patch release to be supported")
 	}
 	if IsSupportedGoVersion("go1.26.7") {
